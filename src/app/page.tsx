@@ -129,10 +129,11 @@ export default function Home() {
   const onSubmit = (values: ProductDetailsFormValues) => {
     // Retrieve existing product details from local storage
     const storedProducts = localStorage.getItem("productDetails");
+    // Ensure existingProducts is always an array, even if storedProducts is null or empty
     const existingProducts = storedProducts ? JSON.parse(storedProducts) : [];
 
     // Add the new product to the existing list
-    const updatedProducts = [...existingProducts, values];
+    const updatedProducts = Array.isArray(existingProducts) ? [...existingProducts, values] : [values];
 
     // Store the updated list in local storage
     localStorage.setItem("productDetails", JSON.stringify(updatedProducts));
@@ -306,3 +307,4 @@ export default function Home() {
     </div>
   );
 }
+
