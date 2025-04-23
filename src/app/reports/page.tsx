@@ -25,6 +25,7 @@ export default function Reports() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
 
@@ -59,6 +60,7 @@ export default function Reports() {
   const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
     let profit = 0;
+    let revenue = 0;
 
     // Filter products within the date range (if applicable)
     const filteredProducts = productDetails.filter((product: ProductDetails) => {
@@ -81,7 +83,7 @@ export default function Reports() {
       return true; // Include all sales if no date range is selected
     });
 
-    // Calculate total profit
+    // Calculate total profit and revenue
     profit = filteredSales.reduce((acc: number, sale: SalesData) => {
       const salePrice = parseFloat(sale.salePrice || "0");
       const quantitySold = parseInt(sale.quantitySold || "0", 10);
@@ -90,17 +92,19 @@ export default function Reports() {
       const product = productDetails.find((p: ProductDetails) => p.productName === sale.productName);
 
       if (product) {
-          const pricePaid = parseFloat(product.pricePaid || "0");
-          const unitProfit = salePrice - pricePaid;
-          return acc + unitProfit * quantitySold;
+        const pricePaid = parseFloat(product.pricePaid || "0");
+        const unitProfit = salePrice - pricePaid;
+        revenue += salePrice * quantitySold; // Accumulate total revenue
+        return acc + unitProfit * quantitySold;
       } else {
-          console.warn(`Product details not found for product: ${sale.productName}`);
-          return acc; // Skip profit calculation if product details are not found
+        console.warn(`Product details not found for product: ${sale.productName}`);
+        return acc; // Skip profit calculation if product details are not found
       }
     }, 0);
 
     setTotalSpent(spent);
     setTotalProfit(profit);
+    setTotalRevenue(revenue);
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +145,7 @@ export default function Reports() {
         </div>
       </div>
       <div className="flex flex-col md:flex-row gap-4 w-full max-w-4xl p-4">
-        <Card className="w-full md:w-1/2">
+        <Card className="w-full md:w-1/3">
           <CardHeader>
             <CardTitle>Spending Report</CardTitle>
             <CardDescription>Track your total spending.</CardDescription>
@@ -152,7 +156,7 @@ export default function Reports() {
           </CardContent>
         </Card>
 
-        <Card className="w-full md:w-1/2">
+        <Card className="w-full md:w-1/3">
           <CardHeader>
             <CardTitle>Profit Report</CardTitle>
             <CardDescription>See how much profit you've made.</CardDescription>
@@ -162,8 +166,18 @@ export default function Reports() {
             <p className="text-muted-foreground">Total profit from your products.</p>
           </CardContent>
         </Card>
+
+        <Card className="w-full md:w-1/3">
+          <CardHeader>
+            <CardTitle>Revenue Report</CardTitle>
+            <CardDescription>See how much revenue you've made.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">${totalRevenue.toFixed(2)}</p>
+            <p className="text-muted-foreground">Total revenue from your products.</p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 }
-
