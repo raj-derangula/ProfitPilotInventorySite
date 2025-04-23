@@ -39,7 +39,10 @@ export default function Inventory() {
     // Retrieve product details from local storage
     const storedDetails = localStorage.getItem("productDetails");
     if (storedDetails) {
-      setProductDetails(JSON.parse(storedDetails));
+      const parsedDetails = JSON.parse(storedDetails);
+      // Filter out products with quantityPurchased equal to 0
+      const filteredDetails = parsedDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+      setProductDetails(filteredDetails);
     }
   }, []);
 
@@ -67,8 +70,12 @@ export default function Inventory() {
         costPrice: editCostPrice,
         productImage: productDetails[selectedProductIndex].productImage, // Keep the same image
       };
-      localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
-      setProductDetails(updatedProductDetails);
+
+      // Filter out products with quantityPurchased equal to 0
+      const filteredProductDetails = updatedProductDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+
+      localStorage.setItem("productDetails", JSON.stringify(filteredProductDetails));
+      setProductDetails(filteredProductDetails);
       setOpen(false);
       toast({
         title: "Product updated!",
@@ -80,8 +87,12 @@ export default function Inventory() {
   const handleRemoveProduct = (index: number) => {
     const updatedProductDetails = [...productDetails];
     updatedProductDetails.splice(index, 1);
-    localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
-    setProductDetails(updatedProductDetails);
+
+    // Filter out products with quantityPurchased equal to 0
+    const filteredProductDetails = updatedProductDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+
+    localStorage.setItem("productDetails", JSON.stringify(filteredProductDetails));
+    setProductDetails(filteredProductDetails);
     toast({
       title: "Product removed!",
     });

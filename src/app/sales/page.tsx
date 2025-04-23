@@ -135,6 +135,9 @@ export default function SalesPage() {
       });
     }
 
+    // Remove products with quantityPurchased equal to 0
+    updatedInventory = updatedInventory.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+
     // Save updated inventory to local storage
     localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
     setInventory(updatedInventory);
