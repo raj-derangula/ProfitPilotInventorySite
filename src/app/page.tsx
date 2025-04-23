@@ -8,7 +8,7 @@ import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
 import {extractProductDetails} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import { LucideIcon, Upload } from "lucide-react";
+import { LucideIcon, Upload, X } from "lucide-react";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form, useFormField} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
@@ -119,6 +119,13 @@ export default function Home() {
     });
   };
 
+  const handleRemoveScreenshot = () => {
+    setScreenshot(null);
+    form.setValue("productName", "");
+    form.setValue("pricePaid", "");
+    form.setValue("quantityPurchased", "");
+  };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10">
       <h1 className="text-3xl font-bold mb-4">ProfitPilot</h1>
@@ -130,7 +137,18 @@ export default function Home() {
           </CardHeader>
           <CardContent className="flex flex-col items-center">
             {screenshot ? (
-              <img src={screenshot} alt="Order Confirmation" className="max-w-full h-auto mb-4 rounded-md"/>
+              <div className="relative">
+                <img src={screenshot} alt="Order Confirmation" className="max-w-full h-auto mb-4 rounded-md"/>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2 bg-background text-muted-foreground hover:bg-secondary"
+                  onClick={handleRemoveScreenshot}
+                >
+                  <X className="h-4 w-4"/>
+                  <span className="sr-only">Remove Screenshot</span>
+                </Button>
+              </div>
             ) : (
               <>
                 <Label htmlFor="screenshot-upload" className="cursor-pointer py-3">
