@@ -90,6 +90,25 @@ export default function SalesPage() {
   }, [sales]);
 
   const onSubmit = (values: SalesFormValues) => {
+    const quantitySold = parseInt(values.quantitySold, 10);
+
+    // Update inventory
+    const updatedInventory = inventory.map((product) => {
+      if (product.productName === values.productName) {
+        const purchased = parseInt(product.quantityPurchased, 10);
+        const remaining = purchased - quantitySold;
+        return {
+          ...product,
+          quantityPurchased: remaining.toString(),
+        };
+      }
+      return product;
+    });
+
+    // Save updated inventory to local storage
+    localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
+
     // Add the new sale to the list of sales
     setSales([...sales, values]);
     toast({
@@ -126,9 +145,12 @@ export default function SalesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {inventory.map((product, index) => (
-                          <SelectItem key={index} value={product.productName}>
-                            {`${product.productName} ($${product.pricePaid})`}
-                          </SelectItem>
+                          // Only show product if there is quantity left
+                          parseInt(product.quantityPurchased, 10) > 0 ? (
+                            <SelectItem key={index} value={product.productName}>
+                              {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
+                            </SelectItem>
+                          ) : null
                         ))}
                       </SelectContent>
                     </Select>
@@ -200,8 +222,7 @@ export default function SalesPage() {
                           initialFocus
                         />
                       </PopoverContent>
-                    </Popover>
-                    <FormDescription>Enter the date of the sale.</FormDescription>
+                    </FormDescription>
                   </FormItem>
                 )}
               />
