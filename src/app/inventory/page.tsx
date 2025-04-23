@@ -4,6 +4,17 @@ import {useEffect, useState} from "react";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {useRouter} from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {Input} from "@/components/ui/input";
+import {Label} from "@/components/ui/label";
+import {useToast} from "@/hooks/use-toast";
 
 interface ProductDetails {
   productName: string;
@@ -16,6 +27,13 @@ interface ProductDetails {
 export default function Inventory() {
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
+  const [editProductName, setEditProductName] = useState("");
+  const [editPricePaid, setEditPricePaid] = useState("");
+  const [editQuantityPurchased, setEditQuantityPurchased] = useState("");
+  const [editCostPrice, setEditCostPrice] = useState("");
+  const {toast} = useToast();
 
   useEffect(() => {
     // Retrieve product details from local storage
@@ -27,6 +45,46 @@ export default function Inventory() {
 
   const handleGoBack = () => {
     router.push("/"); // Navigate back to the main page
+  };
+
+  const handleEditProduct = (index: number) => {
+    const product = productDetails[index];
+    setSelectedProductIndex(index);
+    setEditProductName(product.productName);
+    setEditPricePaid(product.pricePaid);
+    setEditQuantityPurchased(product.quantityPurchased);
+    setEditCostPrice(product.costPrice || "");
+    setOpen(true);
+  };
+
+  const handleUpdateProduct = () => {
+    if (selectedProductIndex !== null) {
+      const updatedProductDetails = [...productDetails];
+      updatedProductDetails[selectedProductIndex] = {
+        productName: editProductName,
+        pricePaid: editPricePaid,
+        quantityPurchased: editQuantityPurchased,
+        costPrice: editCostPrice,
+        productImage: productDetails[selectedProductIndex].productImage, // Keep the same image
+      };
+      localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
+      setProductDetails(updatedProductDetails);
+      setOpen(false);
+      toast({
+        title: "Product updated!",
+        description: `Product Name: ${editProductName}, Price Paid: ${editPricePaid}, Quantity: ${editQuantityPurchased}`,
+      });
+    }
+  };
+
+  const handleRemoveProduct = (index: number) => {
+    const updatedProductDetails = [...productDetails];
+    updatedProductDetails.splice(index, 1);
+    localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
+    setProductDetails(updatedProductDetails);
+    toast({
+      title: "Product removed!",
+    });
   };
 
   return (
@@ -55,6 +113,14 @@ export default function Inventory() {
                     <p className="text-lg font-semibold">Cost Price: ${product.costPrice}</p>
                   )}
                 </div>
+                <div className="flex justify-between">
+                  <Button onClick={() => handleEditProduct(index)} variant="secondary">
+                    Edit
+                  </Button>
+                  <Button onClick={() => handleRemoveProduct(index)} variant="destructive">
+                    Remove
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -65,6 +131,54 @@ export default function Inventory() {
       <Button className="mt-4" onClick={handleGoBack}>
         Add New Product
       </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>Make changes to your product details.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">
+                Name
+              </Label>
+              <Input id="name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} className="col-span-3" />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="price" className="text-right">
+                Price Paid
+              </Label>
+              <Input
+                id="price"
+                value={editPricePaid}
+                onChange={(e) => setEditPricePaid(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="quantity" className="text-right">
+                Quantity
+              </Label>
+              <Input
+                id="quantity"
+                value={editQuantityPurchased}
+                onChange={(e) => setEditQuantityPurchased(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cost" className="text-right">
+                Cost Price
+              </Label>
+              <Input id="cost" value={editCostPrice} onChange={(e) => setEditCostPrice(e.target.value)} className="col-span-3" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleUpdateProduct}>Update Product</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
