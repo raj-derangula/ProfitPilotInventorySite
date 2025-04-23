@@ -1,6 +1,6 @@
 "use client";
 
-import {useState} from "react";
+import {useState, useEffect} from "react";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -63,6 +63,18 @@ export default function Home() {
     },
   });
 
+  useEffect(() => {
+    // Load product details from local storage on component mount
+    const storedProducts = localStorage.getItem("productDetails");
+    if (storedProducts) {
+      try {
+        JSON.parse(storedProducts);
+      } catch (e) {
+        localStorage.removeItem("productDetails");
+      }
+    }
+  }, []);
+
   const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -115,9 +127,16 @@ export default function Home() {
   };
 
   const onSubmit = (values: ProductDetailsFormValues) => {
-    console.log("Form values:", values);
-    // Store the values and product image in local storage
-    localStorage.setItem("productDetails", JSON.stringify(values));
+    // Retrieve existing product details from local storage
+    const storedProducts = localStorage.getItem("productDetails");
+    const existingProducts = storedProducts ? JSON.parse(storedProducts) : [];
+
+    // Add the new product to the existing list
+    const updatedProducts = [...existingProducts, values];
+
+    // Store the updated list in local storage
+    localStorage.setItem("productDetails", JSON.stringify(updatedProducts));
+
     toast({
       title: "Product added!",
       description: `Product Name: ${values.productName}, Price Paid: ${values.pricePaid}, Quantity: ${values.quantityPurchased}`,

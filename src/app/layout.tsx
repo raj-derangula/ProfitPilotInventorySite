@@ -3,7 +3,7 @@ import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
-import {Home, BarChart2, PackagePlus} from "lucide-react";
+import {Home, BarChart2, PackagePlus, IndianRupee} from "lucide-react";
 import Link from "next/link";
 
 const geistSans = Geist({
@@ -46,6 +46,14 @@ export default function RootLayout({
                     <SidebarMenuButton>
                       <PackagePlus/>
                       <span>Inventory</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/sales">
+                    <SidebarMenuButton>
+                      <IndianRupee/>
+                      <span>Sales</span>
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
