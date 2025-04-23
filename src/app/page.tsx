@@ -8,12 +8,13 @@ import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
 import {extractProductDetails} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import { LucideIcon, Upload, X } from "lucide-react";
+import {LucideIcon, Upload, X} from "lucide-react";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form, useFormField} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {Textarea} from "@/components/ui/textarea";
+import {useRouter} from "next/navigation";
 
 const productDetailsSchema = z.object({
   productName: z.string().min(2, {
@@ -49,6 +50,7 @@ export default function Home() {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [suggestedSellingPrice, setSuggestedSellingPrice] = useState<number | null>(null);
   const {toast} = useToast();
+  const router = useRouter();
 
   const form = useForm<ProductDetailsFormValues>({
     resolver: zodResolver(productDetailsSchema),
@@ -71,6 +73,7 @@ export default function Home() {
     reader.onloadend = async () => {
       const dataUri = reader.result as string;
       setScreenshot(dataUri);
+      form.setValue("productImage", dataUri); // Set the screenshot as the product image
       try {
         const productDetails = await extractProductDetails({screenshotDataUri: dataUri});
         form.setValue("productName", productDetails.productName);
@@ -113,10 +116,13 @@ export default function Home() {
 
   const onSubmit = (values: ProductDetailsFormValues) => {
     console.log("Form values:", values);
+    // Store the values and product image in local storage
+    localStorage.setItem("productDetails", JSON.stringify(values));
     toast({
       title: "Product added!",
       description: `Product Name: ${values.productName}, Price Paid: ${values.pricePaid}, Quantity: ${values.quantityPurchased}`,
     });
+    router.push("/inventory"); // Redirect to inventory page after submission
   };
 
   const handleRemoveScreenshot = () => {
@@ -124,6 +130,15 @@ export default function Home() {
     form.setValue("productName", "");
     form.setValue("pricePaid", "");
     form.setValue("quantityPurchased", "");
+    form.setValue("productImage", ""); // Clear the product image
+  };
+
+  const handleChangeScreenshot = () => {
+    // Trigger the file input click event
+    const fileInput = document.getElementById("screenshot-upload") as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
   };
 
   return (
@@ -139,15 +154,26 @@ export default function Home() {
             {screenshot ? (
               <div className="relative">
                 <img src={screenshot} alt="Order Confirmation" className="max-w-full h-auto mb-4 rounded-md"/>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 bg-background text-muted-foreground hover:bg-secondary"
-                  onClick={handleRemoveScreenshot}
-                >
-                  <X className="h-4 w-4"/>
-                  <span className="sr-only">Remove Screenshot</span>
-                </Button>
+                <div className="absolute top-2 right-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-background text-muted-foreground hover:bg-secondary mr-2"
+                    onClick={handleRemoveScreenshot}
+                  >
+                    <X className="h-4 w-4"/>
+                    <span className="sr-only">Remove Screenshot</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-background text-muted-foreground hover:bg-secondary"
+                    onClick={handleChangeScreenshot}
+                  >
+                    <Upload className="h-4 w-4"/>
+                    <span className="sr-only">Change Screenshot</span>
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -236,9 +262,9 @@ export default function Home() {
                     <FormItem>
                       <FormLabel>Product Image (Optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Product Image URL" {...field} />
+                        <Input placeholder="Product Image URL" {...field} readOnly />
                       </FormControl>
-                      <FormDescription>Enter the URL of the product image.</FormDescription>
+                      <FormDescription>Product Image.</FormDescription>
                     </FormItem>
                   )}
                 />

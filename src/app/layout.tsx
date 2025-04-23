@@ -2,7 +2,9 @@ import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
-import {SidebarProvider} from "@/components/ui/sidebar";
+import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
+import {Home, BarChart2, PackagePlus} from "lucide-react";
+import Link from "next/link";
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -28,11 +30,42 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <SidebarProvider>
-          {children}
-          <Toaster/>
+          <Sidebar>
+            <SidebarContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <Link href="/">
+                    <SidebarMenuButton>
+                      <Home/>
+                      <span>Add Product</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/inventory">
+                    <SidebarMenuButton>
+                      <PackagePlus/>
+                      <span>Inventory</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/reports">
+                    <SidebarMenuButton>
+                      <BarChart2/>
+                      <span>Reports</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarContent>
+          </Sidebar>
+          <main className="flex-1 p-4">
+            {children}
+            <Toaster/>
+          </main>
         </SidebarProvider>
       </body>
     </html>
   );
 }
-
