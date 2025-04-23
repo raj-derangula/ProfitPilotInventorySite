@@ -71,11 +71,8 @@ export default function Inventory() {
         productImage: productDetails[selectedProductIndex].productImage, // Keep the same image
       };
 
-      // Filter out products with quantityPurchased equal to 0
-      const filteredProductDetails = updatedProductDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
-
-      localStorage.setItem("productDetails", JSON.stringify(filteredProductDetails));
-      setProductDetails(filteredProductDetails);
+      localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
+      setProductDetails(updatedProductDetails);
       setOpen(false);
       toast({
         title: "Product updated!",

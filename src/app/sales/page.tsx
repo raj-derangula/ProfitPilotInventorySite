@@ -8,7 +8,7 @@ import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form, useFormField} from "@/components/ui/form";
 import {z} from "zod";
-import {useForm} from "react-hook-form";
+import {useForm, useFieldArray} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useRouter} from "next/navigation";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
@@ -64,12 +64,18 @@ export default function SalesPage() {
   const {toast} = useToast();
   const router = useRouter();
   const [inventory, setInventory] = useState<ProductDetails[]>([]);
+
   const form = useForm<SalesFormValues>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: {
       productsSold: [],
       dateOfSale: new Date(),
     },
+  });
+
+  const {fields, append, remove} = useFieldArray({
+    control: form.control,
+    name: "productsSold",
   });
 
   useEffect(() => {
@@ -135,7 +141,7 @@ export default function SalesPage() {
       });
     }
 
-    // Remove products with quantityPurchased equal to 0
+    // Filter out products with quantityPurchased equal to 0
     updatedInventory = updatedInventory.filter(product => parseInt(product.quantityPurchased, 10) > 0);
 
     // Save updated inventory to local storage
@@ -143,7 +149,7 @@ export default function SalesPage() {
     setInventory(updatedInventory);
 
     // Add the new sale to the list of sales
-    setSales([...sales, {...values}]);
+    setSales([...sales, values]);
     toast({
       title: "Sale recorded!",
       description: `Sale of ${values.productsSold.length} products recorded on ${values.dateOfSale.toLocaleDateString()}`,
@@ -153,16 +159,6 @@ export default function SalesPage() {
 
   const handleGoToInventory = () => {
     router.push("/inventory");
-  };
-
-  const addProductField = () => {
-    form.setValue("productsSold", [...form.getValues("productsSold"), {productName: "", salePrice: "", quantitySold: ""}]);
-  };
-
-  const removeProductField = (index: number) => {
-    const productsSold = [...form.getValues("productsSold")];
-    productsSold.splice(index, 1);
-    form.setValue("productsSold", productsSold);
   };
 
   return (
@@ -176,11 +172,11 @@ export default function SalesPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {form.watch("productsSold")?.map((product, index) => (
-                <div key={index} className="space-y-2 border p-4 rounded">
+              {fields.map((product, index) => (
+                <div key={product.id} className="space-y-2 border p-4 rounded">
                   <div className="flex justify-between">
                     <h3 className="text-lg font-semibold">Product {index + 1}</h3>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => removeProductField(index)}>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => remove(index)}>
                       Remove
                     </Button>
                   </div>
@@ -193,7 +189,7 @@ export default function SalesPage() {
                         <FormControl>
                           <Select
                             onValueChange={field.onChange}
-                            defaultValue={form.getValues(`productsSold.${index}.productName`)}
+                            defaultValue={field.value}
                           >
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select a product..." />
@@ -241,7 +237,7 @@ export default function SalesPage() {
                   />
                 </div>
               ))}
-              <Button type="button" onClick={addProductField}>Add Product</Button>
+              <Button type="button" onClick={() => append({productName: "", salePrice: "", quantitySold: ""})}>Add Product</Button>
               <FormField
                 control={form.control}
                 name="dateOfSale"

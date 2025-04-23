@@ -135,8 +135,11 @@ export default function Home() {
     // Add the new product to the existing list
     const updatedProducts = Array.isArray(existingProducts) ? [...existingProducts, values] : [values];
 
+    // Filter out products with quantityPurchased equal to 0
+    const filteredProducts = updatedProducts.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+
     // Store the updated list in local storage
-    localStorage.setItem("productDetails", JSON.stringify(updatedProducts));
+    localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
 
     toast({
       title: "Product added!",
@@ -307,4 +310,3 @@ export default function Home() {
     </div>
   );
 }
-
