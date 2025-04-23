@@ -9,6 +9,9 @@ export default {
   ],
   theme: {
   	extend: {
+      fontFamily: {
+        'sans': ['Roboto', 'sans-serif'], /* Set Roboto as the default sans-serif font */
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

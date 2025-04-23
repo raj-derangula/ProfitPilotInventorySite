@@ -1,12 +1,13 @@
 import type {Metadata} from 'next';
-import {Inter} from 'next/font/google';
+import {Roboto} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
 import {Home, BarChart2, PackagePlus, DollarSign} from "lucide-react";
 import Link from "next/link";
 
-const inter = Inter({
+const roboto = Roboto({
+  weight: ['400', '500', '700'],
   subsets: ['latin'],
   display: 'swap',
 });
@@ -22,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.className}>
-      <body>
+    <html lang="en" className={roboto.className}>
+      <body className="min-h-screen antialiased">
         <SidebarProvider>
           <Sidebar>
             <SidebarContent>
@@ -72,4 +73,3 @@ export default function RootLayout({
     </html>
   );
 }
-

@@ -2,9 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+/*body {
   font-family: Arial, Helvetica, sans-serif;
-}
+}*/
 
 @layer base {
   :root {
@@ -32,7 +32,7 @@ body {
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 142 92% 58%;
@@ -41,7 +41,13 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 142 92% 58%;
+
+    /* Updated styles for a cleaner look */
+    --border-radius: 0.5rem;
+    --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+    --transition-duration: 0.2s; /* Smooth transitions */
   }
+
   .dark {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
@@ -84,6 +90,8 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Roboto', sans-serif; /* Apply Roboto font */
+    -webkit-font-smoothing: antialiased; /* Improve font rendering */
   }
 }
 
@@ -97,6 +105,9 @@ body {
 [data-sidebar] {
   background-color: hsl(var(--sidebar-background));
   color: hsl(var(--sidebar-foreground));
+  box-shadow: var(--box-shadow);
+  transition: background-color var(--transition-duration),
+              color var(--transition-duration);
 }
 
 [data-sidebar="rail"] {
@@ -109,9 +120,36 @@ body {
 
 /* Example styling for sidebar input */
 [data-sidebar="input"] {
-  height: 2rem;
+  height: 2.25rem; /* Slightly larger input */
   width: 100%;
-  border-radius: 0.5rem;
+  border-radius: var(--border-radius);
   box-shadow: none;
+  transition: border var(--transition-duration),
+              box-shadow var(--transition-duration);
 }
 
+/* Enhance button styles */
+.btn {
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  transition: background-color var(--transition-duration),
+              color var(--transition-duration),
+              box-shadow var(--transition-duration);
+}
+
+/* Card styling */
+.card {
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  transition: background-color var(--transition-duration),
+              box-shadow var(--transition-duration);
+}
+
+/* Input fields styling */
+.input,
+.textarea,
+.select {
+  border-radius: var(--border-radius);
+  transition: border-color var(--transition-duration),
+              box-shadow var(--transition-duration);
+}
