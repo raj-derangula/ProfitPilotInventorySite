@@ -11,6 +11,15 @@ import {z} from "zod";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useRouter} from "next/navigation";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+
+interface ProductDetails {
+  productName: string;
+  pricePaid: string;
+  quantityPurchased: string;
+  costPrice?: string;
+  productImage?: string;
+}
 
 const salesFormSchema = z.object({
   productName: z.string().min(2, {
@@ -45,6 +54,7 @@ export default function SalesPage() {
   const [sales, setSales] = useState<SalesFormValues[]>([]);
   const {toast} = useToast();
   const router = useRouter();
+  const [inventory, setInventory] = useState<ProductDetails[]>([]);
   const form = useForm<SalesFormValues>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: {
@@ -60,6 +70,12 @@ export default function SalesPage() {
     const storedSales = localStorage.getItem("sales");
     if (storedSales) {
       setSales(JSON.parse(storedSales));
+    }
+
+    // Load inventory data from local storage
+    const storedInventory = localStorage.getItem("productDetails");
+    if (storedInventory) {
+      setInventory(JSON.parse(storedInventory));
     }
   }, []);
 
@@ -99,10 +115,19 @@ export default function SalesPage() {
                 render={({field}) => (
                   <FormItem>
                     <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Product Name" {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the name of the product sold.</FormDescription>
+                    <Select onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a product..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {inventory.map((product, index) => (
+                          <SelectItem key={index} value={product.productName}>
+                            {`${product.productName} ($${product.pricePaid})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Select the name of the product sold.</FormDescription>
                   </FormItem>
                 )}
               />
