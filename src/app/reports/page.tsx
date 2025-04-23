@@ -43,7 +43,10 @@ export default function Reports() {
     // Load sales data from local storage
     const storedSales = localStorage.getItem("sales");
     if (storedSales) {
-      setSalesData(JSON.parse(storedSales));
+      const parsedSales = JSON.parse(storedSales);
+      // Sort sales data by date in descending order (most recent first)
+      parsedSales.sort((a: SalesData, b: SalesData) => new Date(b.dateOfSale).getTime() - new Date(a.dateOfSale).getTime());
+      setSalesData(parsedSales);
     }
   }, []);
 
@@ -196,6 +199,7 @@ export default function Reports() {
                   {filteredSalesData.map((sale: SalesData, index: number) => {
                     let saleProfit = 0;
                     let saleRevenue = 0;
+                    let saleSpending = 0;
 
                     sale.productsSold.forEach((soldProduct) => {
                       const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
@@ -212,6 +216,7 @@ export default function Reports() {
                         }
                         saleRevenue += salePrice * quantitySold; // Accumulate total revenue
                         saleProfit += unitProfit * quantitySold;
+                        saleSpending += pricePaid * quantitySold;
                       } else {
                         console.warn(`Product details not found for product: ${soldProduct.productName}`);
                       }
@@ -233,17 +238,7 @@ export default function Reports() {
                         </p>
                         <p>Sale Profit: ${saleProfit.toFixed(2)}</p>
                         <p>Sale Revenue: ${saleRevenue.toFixed(2)}</p>
-                        <p>Sale Spending: ${productDetails.reduce((acc: number, product: ProductDetails) => {
-                          let total = 0;
-                          sale.productsSold.forEach((soldProduct) => {
-                            if (product.productName === soldProduct.productName) {
-                              const pricePaid = parseFloat(product.pricePaid || "0");
-                              const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
-                              total += pricePaid * quantitySold;
-                            }
-                          });
-                          return acc + total;
-                        }, 0).toFixed(2)}</p>
+                        <p>Sale Spending: ${saleSpending.toFixed(2)}</p>
                       </li>
                     );
                   })}
