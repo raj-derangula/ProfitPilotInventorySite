@@ -2,7 +2,6 @@
 
 import {useState, useEffect} from "react";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
-import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 
@@ -44,12 +43,20 @@ export default function Reports() {
   }, []);
 
   useEffect(() => {
+    // Calculate totals for all time on component mount
+    calculateTotals(null, null);
+  }, [productDetails, salesData]);
+
+  useEffect(() => {
     if (startDate && endDate) {
-      calculateTotals();
+      calculateTotals(startDate, endDate);
+    } else {
+      // If either start or end date is cleared, recalculate totals for all time
+      calculateTotals(null, null);
     }
   }, [startDate, endDate, productDetails, salesData]);
 
-  const calculateTotals = () => {
+  const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
     let profit = 0;
 
@@ -68,7 +75,10 @@ export default function Reports() {
     // Filter sales within the date range
     const filteredSales = salesData.filter((sale: SalesData) => {
       const saleDate = new Date(sale.dateOfSale);
-      return saleDate >= startDate && saleDate <= endDate;
+      if (start && end) {
+        return saleDate >= start && saleDate <= end;
+      }
+      return true; // Include all sales if no date range is selected
     });
 
     // Calculate total profit
@@ -86,6 +96,22 @@ export default function Reports() {
     setTotalProfit(profit);
   };
 
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value === "") {
+      setStartDate(null);
+    } else {
+      setStartDate(new Date(e.target.value));
+    }
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value === "") {
+      setEndDate(null);
+    } else {
+      setEndDate(new Date(e.target.value));
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10">
       <h1 className="text-3xl font-bold mb-4">Reports</h1>
@@ -95,7 +121,7 @@ export default function Reports() {
           <Input
             type="date"
             id="start-date"
-            onChange={(e) => setStartDate(new Date(e.target.value))}
+            onChange={handleStartDateChange}
           />
         </div>
         <div>
@@ -103,7 +129,7 @@ export default function Reports() {
           <Input
             type="date"
             id="end-date"
-            onChange={(e) => setEndDate(new Date(e.target.value))}
+            onChange={handleEndDateChange}
           />
         </div>
       </div>
@@ -130,7 +156,6 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
-      <Button disabled>Generate Detailed Report</Button>
     </div>
   );
 }
