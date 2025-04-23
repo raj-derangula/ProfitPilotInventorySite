@@ -1,5 +1,5 @@
 import type {Metadata} from 'next';
-import {Inter, Inter_Mono} from 'next/font/google';
+import {Inter} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
@@ -7,11 +7,6 @@ import {Home, BarChart2, PackagePlus, DollarSign} from "lucide-react";
 import Link from "next/link";
 
 const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-});
-
-const interMono = Inter_Mono({
   subsets: ['latin'],
   display: 'swap',
 });
@@ -28,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.className}>
-      <body className={`${interMono.variable} antialiased`}>
+      <body>
         <SidebarProvider>
           <Sidebar>
             <SidebarContent>
@@ -43,24 +38,24 @@ export default function RootLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <Link href="/inventory">
+                    <PackagePlus/>
                     <SidebarMenuButton>
-                      <PackagePlus/>
                       <span>Inventory</span>
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <Link href="/sales">
+                    <DollarSign/>
                     <SidebarMenuButton>
-                      <DollarSign/>
                       <span>Sales</span>
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <Link href="/reports">
+                    <BarChart2/>
                     <SidebarMenuButton>
-                      <BarChart2/>
                       <span>Reports</span>
                     </SidebarMenuButton>
                   </Link>
@@ -77,3 +72,4 @@ export default function RootLayout({
     </html>
   );
 }
+
