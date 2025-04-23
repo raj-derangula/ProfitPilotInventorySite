@@ -27,45 +27,47 @@ interface ProductDetails {
 }
 
 const salesFormSchema = z.object({
-  productName: z.string().min(2, {
-    message: "Product name must be at least 2 characters.",
-  }),
-  salePrice: z.string().refine((value) => {
-    try {
-      const num = parseFloat(value);
-      return !isNaN(num) && num > 0;
-    } catch (e) {
-      return false;
-    }
-  }, {
-    message: "Sale price must be a valid number greater than zero.",
-  }),
-  quantitySold: z.string().refine((value) => {
-    try {
-      const num = parseInt(value, 10);
-      return !isNaN(num) && num > 0;
-    } catch (e) {
-      return false;
-    }
-  }, {
-    message: "Quantity sold must be a valid integer greater than zero.",
-  }),
+  productsSold: z.array(
+    z.object({
+      productName: z.string().min(2, {
+        message: "Product name must be at least 2 characters.",
+      }),
+      salePrice: z.string().refine((value) => {
+        try {
+          const num = parseFloat(value);
+          return !isNaN(num) && num > 0;
+        } catch (e) {
+          return false;
+        }
+      }, {
+        message: "Sale price must be a valid number greater than zero.",
+      }),
+      quantitySold: z.string().refine((value) => {
+        try {
+          const num = parseInt(value, 10);
+          return !isNaN(num) && num > 0;
+        } catch (e) {
+          return false;
+        }
+      }, {
+        message: "Quantity sold must be a valid integer greater than zero.",
+      }),
+    })
+  ).min(1, {message: "At least one product must be selected"}),
   dateOfSale: z.date(),
 });
 
 type SalesFormValues = z.infer<typeof salesFormSchema>;
 
 export default function SalesPage() {
-  const [sales, setSales] = useState<SalesFormValues[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
   const {toast} = useToast();
   const router = useRouter();
   const [inventory, setInventory] = useState<ProductDetails[]>([]);
   const form = useForm<SalesFormValues>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: {
-      productName: "",
-      salePrice: "",
-      quantitySold: "",
+      productsSold: [],
       dateOfSale: new Date(),
     },
   });
@@ -90,36 +92,74 @@ export default function SalesPage() {
   }, [sales]);
 
   const onSubmit = (values: SalesFormValues) => {
-    const quantitySold = parseInt(values.quantitySold, 10);
-
-    // Update inventory
-    const updatedInventory = inventory.map((product) => {
-      if (product.productName === values.productName) {
-        const purchased = parseInt(product.quantityPurchased, 10);
-        const remaining = purchased - quantitySold;
-        return {
-          ...product,
-          quantityPurchased: remaining.toString(),
-        };
+    // First, validate that all quantities are valid based on inventory
+    for (const productSold of values.productsSold) {
+      const inventoryProduct = inventory.find(p => p.productName === productSold.productName);
+      if (!inventoryProduct) {
+        toast({
+          title: "Error recording sale!",
+          description: `Product ${productSold.productName} not found in inventory.`,
+          variant: "destructive",
+        });
+        return;
       }
-      return product;
-    });
+
+      const purchased = parseInt(inventoryProduct.quantityPurchased, 10);
+      const quantitySold = parseInt(productSold.quantitySold, 10);
+
+      if (quantitySold > purchased) {
+        toast({
+          title: "Error recording sale!",
+          description: `Not enough ${productSold.productName} in inventory.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // If all quantities are valid, proceed to update inventory and record sale
+    let updatedInventory = [...inventory];
+
+    for (const productSold of values.productsSold) {
+      updatedInventory = updatedInventory.map((product) => {
+        if (product.productName === productSold.productName) {
+          const purchased = parseInt(product.quantityPurchased, 10);
+          const quantitySold = parseInt(productSold.quantitySold, 10);
+          const remaining = purchased - quantitySold;
+          return {
+            ...product,
+            quantityPurchased: remaining.toString(),
+          };
+        }
+        return product;
+      });
+    }
 
     // Save updated inventory to local storage
     localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
     setInventory(updatedInventory);
 
     // Add the new sale to the list of sales
-    setSales([...sales, values]);
+    setSales([...sales, {...values}]);
     toast({
       title: "Sale recorded!",
-      description: `Sale of ${values.quantitySold} ${values.productName} recorded for $${values.salePrice} on ${values.dateOfSale.toLocaleDateString()}`,
+      description: `Sale of ${values.productsSold.length} products recorded on ${values.dateOfSale.toLocaleDateString()}`,
     });
     form.reset();
   };
 
   const handleGoToInventory = () => {
     router.push("/inventory");
+  };
+
+  const addProductField = () => {
+    form.setValue("productsSold", [...form.getValues("productsSold"), {productName: "", salePrice: "", quantitySold: ""}]);
+  };
+
+  const removeProductField = (index: number) => {
+    const productsSold = [...form.getValues("productsSold")];
+    productsSold.splice(index, 1);
+    form.setValue("productsSold", productsSold);
   };
 
   return (
@@ -133,59 +173,72 @@ export default function SalesPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="productName"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a product..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {inventory.map((product, index) => {
-                            // Only show product if there is quantity left
-                            return parseInt(product.quantityPurchased, 10) > 0 ? (
-                              <SelectItem key={index} value={product.productName}>
-                                {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
-                              </SelectItem>
-                            ) : null;
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormDescription>Select the product sold.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="salePrice"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Sale Price</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Sale Price" {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the price you sold the product for.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="quantitySold"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Quantity Sold</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Quantity Sold" {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the quantity of the product sold.</FormDescription>
-                  </FormItem>
-                )}
-              />
+              {form.watch("productsSold")?.map((product, index) => (
+                <div key={index} className="space-y-2 border p-4 rounded">
+                  <div className="flex justify-between">
+                    <h3 className="text-lg font-semibold">Product {index + 1}</h3>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => removeProductField(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name={`productsSold.${index}.productName`}
+                    render={({field}) => (
+                      <FormItem>
+                        <FormLabel>Product Name</FormLabel>
+                        <FormControl>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={form.getValues(`productsSold.${index}.productName`)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select a product..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {inventory.map((product, inventoryIndex) => {
+                                return parseInt(product.quantityPurchased, 10) > 0 ? (
+                                  <SelectItem key={inventoryIndex} value={product.productName}>
+                                    {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
+                                  </SelectItem>
+                                ) : null;
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormDescription>Select the product sold.</FormDescription>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`productsSold.${index}.salePrice`}
+                    render={({field}) => (
+                      <FormItem>
+                        <FormLabel>Sale Price</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Sale Price" {...field} />
+                        </FormControl>
+                        <FormDescription>Enter the price you sold the product for.</FormDescription>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`productsSold.${index}.quantitySold`}
+                    render={({field}) => (
+                      <FormItem>
+                        <FormLabel>Quantity Sold</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Quantity Sold" {...field} />
+                        </FormControl>
+                        <FormDescription>Enter the quantity of the product sold.</FormDescription>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ))}
+              <Button type="button" onClick={addProductField}>Add Product</Button>
               <FormField
                 control={form.control}
                 name="dateOfSale"

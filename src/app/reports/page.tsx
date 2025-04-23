@@ -14,9 +14,11 @@ interface ProductDetails {
 }
 
 interface SalesData {
-  productName: string;
-  salePrice: string;
-  quantitySold: string;
+  productsSold: {
+    productName: string;
+    salePrice: string;
+    quantitySold: string;
+  }[];
   dateOfSale: Date;
 }
 
@@ -62,13 +64,8 @@ export default function Reports() {
     let profit = 0;
     let revenue = 0;
 
-    // Filter products within the date range (if applicable)
-    const filteredProducts = productDetails.filter((product: ProductDetails) => {
-      return true; // For now, consider all products (no date associated with product purchase)
-    });
-
     // Calculate total spending
-    spent = filteredProducts.reduce((acc: number, product: ProductDetails) => {
+    spent = productDetails.reduce((acc: number, product: ProductDetails) => {
       const pricePaid = parseFloat(product.pricePaid || "0");
       const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
       return acc + pricePaid * quantityPurchased;
@@ -84,23 +81,21 @@ export default function Reports() {
     });
 
     // Calculate total profit and revenue
-    profit = filteredSales.reduce((acc: number, sale: SalesData) => {
-      const salePrice = parseFloat(sale.salePrice || "0");
-      const quantitySold = parseInt(sale.quantitySold || "0", 10);
-
-      // Find the product details based on the product name in the sale
-      const product = productDetails.find((p: ProductDetails) => p.productName === sale.productName);
-
-      if (product) {
-        const pricePaid = parseFloat(product.pricePaid || "0");
-        const unitProfit = salePrice - pricePaid;
-        revenue += salePrice * quantitySold; // Accumulate total revenue
-        return acc + unitProfit * quantitySold;
-      } else {
-        console.warn(`Product details not found for product: ${sale.productName}`);
-        return acc; // Skip profit calculation if product details are not found
-      }
-    }, 0);
+    filteredSales.forEach((sale: SalesData) => {
+      sale.productsSold.forEach((soldProduct) => {
+        const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+        if (product) {
+          const pricePaid = parseFloat(product.pricePaid || "0");
+          const salePrice = parseFloat(soldProduct.salePrice || "0");
+          const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
+          const unitProfit = salePrice - pricePaid;
+          revenue += salePrice * quantitySold; // Accumulate total revenue
+          profit += unitProfit * quantitySold;
+        } else {
+          console.warn(`Product details not found for product: ${soldProduct.productName}`);
+        }
+      });
+    });
 
     setTotalSpent(spent);
     setTotalProfit(profit);
