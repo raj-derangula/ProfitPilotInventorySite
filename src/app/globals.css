@@ -135,6 +135,8 @@
   transition: background-color var(--transition-duration),
               color var(--transition-duration),
               box-shadow var(--transition-duration);
+   /* Add hover effect */
+  @apply hover:scale-105 hover:shadow-md active:scale-100;
 }
 
 /* Card styling */
@@ -152,4 +154,13 @@
   border-radius: var(--border-radius);
   transition: border-color var(--transition-duration),
               box-shadow var(--transition-duration);
+  /* Add focus effect */
+  @apply focus:border-primary focus:ring-primary focus:ring-offset-2;
+}
+
+/* Add transition to links */
+a {
+  transition: color 0.2s ease-in-out;
+  /* Add hover effect */
+  @apply hover:text-primary;
 }
