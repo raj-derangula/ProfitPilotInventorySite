@@ -90,8 +90,8 @@ export default function Reports() {
       const product = productDetails.find((p: ProductDetails) => p.productName === sale.productName);
 
       if (product) {
-          const costPrice = parseFloat(product.costPrice || "0");
-          const unitProfit = salePrice - costPrice;
+          const pricePaid = parseFloat(product.pricePaid || "0");
+          const unitProfit = salePrice - pricePaid;
           return acc + unitProfit * quantitySold;
       } else {
           console.warn(`Product details not found for product: ${sale.productName}`);
@@ -166,3 +166,4 @@ export default function Reports() {
     </div>
   );
 }
+
