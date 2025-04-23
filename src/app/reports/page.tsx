@@ -4,6 +4,7 @@ import {useState, useEffect} from "react";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
+import {ScrollArea} from "@/components/ui/scroll-area";
 
 interface ProductDetails {
   productName: string;
@@ -30,6 +31,7 @@ export default function Reports() {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
+  const [filteredSalesData, setFilteredSalesData] = useState<SalesData[]>([]);
 
   useEffect(() => {
     // Load product details from local storage
@@ -63,6 +65,7 @@ export default function Reports() {
     let spent = 0;
     let profit = 0;
     let revenue = 0;
+    let filteredSales: SalesData[] = salesData;
 
     // Calculate total spending
     spent = productDetails.reduce((acc: number, product: ProductDetails) => {
@@ -72,13 +75,12 @@ export default function Reports() {
     }, 0);
 
     // Filter sales within the date range
-    const filteredSales = salesData.filter((sale: SalesData) => {
-      const saleDate = new Date(sale.dateOfSale);
-      if (start && end) {
+    if (start && end) {
+      filteredSales = salesData.filter((sale: SalesData) => {
+        const saleDate = new Date(sale.dateOfSale);
         return saleDate >= start && saleDate <= end;
-      }
-      return true; // Include all sales if no date range is selected
-    });
+      });
+    }
 
     // Calculate total profit and revenue
     filteredSales.forEach((sale: SalesData) => {
@@ -86,9 +88,15 @@ export default function Reports() {
         const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
         if (product) {
           const pricePaid = parseFloat(product.pricePaid || "0");
+          const costPrice = parseFloat(product.costPrice || "0");
           const salePrice = parseFloat(soldProduct.salePrice || "0");
           const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
-          const unitProfit = salePrice - pricePaid;
+          let unitProfit = salePrice - pricePaid;
+
+          // If cost price is available, use that for profit calculation
+          if (product.costPrice) {
+            unitProfit = salePrice - costPrice;
+          }
           revenue += salePrice * quantitySold; // Accumulate total revenue
           profit += unitProfit * quantitySold;
         } else {
@@ -100,6 +108,7 @@ export default function Reports() {
     setTotalSpent(spent);
     setTotalProfit(profit);
     setTotalRevenue(revenue);
+    setFilteredSalesData(filteredSales);
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,6 +179,79 @@ export default function Reports() {
           <CardContent>
             <p className="text-2xl font-semibold">${totalRevenue.toFixed(2)}</p>
             <p className="text-muted-foreground">Total revenue from your products.</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="w-full max-w-4xl p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales Orders</CardTitle>
+            <CardDescription>List of sales orders within the selected time period.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] w-full">
+              {filteredSalesData.length > 0 ? (
+                <ul>
+                  {filteredSalesData.map((sale: SalesData, index: number) => {
+                    let saleProfit = 0;
+                    let saleRevenue = 0;
+
+                    sale.productsSold.forEach((soldProduct) => {
+                      const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+                      if (product) {
+                        const pricePaid = parseFloat(product.pricePaid || "0");
+                        const costPrice = parseFloat(product.costPrice || "0");
+                        const salePrice = parseFloat(soldProduct.salePrice || "0");
+                        const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
+                        let unitProfit = salePrice - pricePaid;
+
+                        // If cost price is available, use that for profit calculation
+                        if (product.costPrice) {
+                          unitProfit = salePrice - costPrice;
+                        }
+                        saleRevenue += salePrice * quantitySold; // Accumulate total revenue
+                        saleProfit += unitProfit * quantitySold;
+                      } else {
+                        console.warn(`Product details not found for product: ${soldProduct.productName}`);
+                      }
+                    });
+
+                    return (
+                      <li key={index} className="mb-2 border-b pb-2">
+                        <p className="font-semibold">
+                          Sale Date: {new Date(sale.dateOfSale).toLocaleDateString()}
+                        </p>
+                        <p>
+                          Products Sold:
+                          {sale.productsSold.map((soldProduct, i) => (
+                            <span key={i}>
+                              {soldProduct.productName} ({soldProduct.quantitySold} x ${soldProduct.salePrice})
+                              {i < sale.productsSold.length - 1 ? ", " : ""}
+                            </span>
+                          ))}
+                        </p>
+                        <p>Sale Profit: ${saleProfit.toFixed(2)}</p>
+                        <p>Sale Revenue: ${saleRevenue.toFixed(2)}</p>
+                        <p>Sale Spending: ${productDetails.reduce((acc: number, product: ProductDetails) => {
+                          let total = 0;
+                          sale.productsSold.forEach((soldProduct) => {
+                            if (product.productName === soldProduct.productName) {
+                              const pricePaid = parseFloat(product.pricePaid || "0");
+                              const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
+                              total += pricePaid * quantitySold;
+                            }
+                          });
+                          return acc + total;
+                        }, 0).toFixed(2)}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p>No sales orders found for the selected time period.</p>
+              )}
+            </ScrollArea>
           </CardContent>
         </Card>
       </div>
