@@ -85,11 +85,18 @@ export default function Reports() {
     profit = filteredSales.reduce((acc: number, sale: SalesData) => {
       const salePrice = parseFloat(sale.salePrice || "0");
       const quantitySold = parseInt(sale.quantitySold || "0", 10);
-      // Find the cost price of the product
+
+      // Find the product details based on the product name in the sale
       const product = productDetails.find((p: ProductDetails) => p.productName === sale.productName);
-      const costPrice = parseFloat(product?.costPrice || "0");
-      const unitProfit = salePrice - costPrice;
-      return acc + unitProfit * quantitySold;
+
+      if (product) {
+          const costPrice = parseFloat(product.costPrice || "0");
+          const unitProfit = salePrice - costPrice;
+          return acc + unitProfit * quantitySold;
+      } else {
+          console.warn(`Product details not found for product: ${sale.productName}`);
+          return acc; // Skip profit calculation if product details are not found
+      }
     }, 0);
 
     setTotalSpent(spent);
@@ -159,4 +166,3 @@ export default function Reports() {
     </div>
   );
 }
-
