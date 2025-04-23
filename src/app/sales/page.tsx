@@ -123,117 +123,99 @@ export default function SalesPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10">
-      <h1 className="text-3xl font-bold mb-4">Record a Sale</h1>
-      <Card className="w-full max-w-4xl p-4">
-        <CardHeader>
-          <CardTitle>Sale Details</CardTitle>
-          <CardDescription>Record the details of your sale.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="productName"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Product Name</FormLabel>
-                    <Select onValueChange={field.onChange}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select a product..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {inventory.map((product, index) => (
-                          // Only show product if there is quantity left
-                          parseInt(product.quantityPurchased, 10) > 0 ? (
-                            <SelectItem key={index} value={product.productName}>
-                              {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
-                            </SelectItem>
-                          ) : null
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Select the name of the product sold.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="salePrice"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Sale Price</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Sale Price" {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the price at which the product was sold.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="quantitySold"
-                render={({field}) => (
-                  <FormItem>
-                    <FormLabel>Quantity Sold</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Quantity Sold" {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the quantity of the product sold.</FormDescription>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="dateOfSale"
-                render={({field}) => (
-                  <FormItem className="flex flex-col space-y-3">
-                    <FormLabel>Date of Sale</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-[240px] pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            field.onChange(date);
-                          }}
-                          disabled={(date) =>
-                            date > new Date() || date < new Date("2020-01-01")
-                          }
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </FormDescription>
-                  </FormItem>
-                )}
-              />
-              <Button type="submit">Record Sale</Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+    
+      
+        
+          Record a Sale
+        
+        
+          
+            Sale Details
+            Record the details of your sale.
+          
+          
+            
+              
+                Product Name
+              
+              <Select onValueChange={field.onChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a product..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {inventory.map((product, index) => (
+                    // Only show product if there is quantity left
+                    parseInt(product.quantityPurchased, 10) > 0 ? (
+                      <SelectItem key={index} value={product.productName}>
+                        {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
+                      </SelectItem>
+                    ) : null
+                  ))}
+                </SelectContent>
+              </Select>
+              
+            
+              
+                Sale Price
+              
+              
+                <Input placeholder="Sale Price" {...field} />
+              
+              
+            
+              
+                Quantity Sold
+              
+              
+                <Input placeholder="Quantity Sold" {...field} />
+              
+              
+            
+              
+                Date of Sale
+              
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-[240px] pl-3 text-left font-normal",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={(date) => {
+                      field.onChange(date);
+                    }}
+                    disabled={(date) =>
+                      date > new Date() || date < new Date("2020-01-01")
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              
+            
+            <Button type="submit">Record Sale</Button>
+          
+        
+      
       <Button className="mt-4" onClick={handleGoToInventory}>
         Go To Inventory
       </Button>
-    </div>
+    
   );
 }
