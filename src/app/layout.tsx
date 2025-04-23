@@ -1,21 +1,19 @@
 import type {Metadata} from 'next';
-import {Geist, Geist_Mono} from 'next/font/google';
+import {Inter, Inter_Mono} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
 import {Home, BarChart2, PackagePlus, DollarSign} from "lucide-react";
 import Link from "next/link";
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const inter = Inter({
   subsets: ['latin'],
-  preload: true,
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const interMono = Inter_Mono({
   subsets: ['latin'],
-  preload: true,
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -29,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" className={inter.className}>
+      <body className={`${interMono.variable} antialiased`}>
         <SidebarProvider>
           <Sidebar>
             <SidebarContent>
