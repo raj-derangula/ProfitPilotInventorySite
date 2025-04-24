@@ -98,7 +98,7 @@ export default function ArchivedInventory() {
       const storedDetails = localStorage.getItem("purchasedProducts");
       if (storedDetails) {
         let parsedDetails = JSON.parse(storedDetails);
-        parsedDetails.splice(index, 1); // Remove the product from the array
+        parsedDetails = parsedDetails.filter((_, i) => i !== index); // Remove the product from the array
         localStorage.setItem("purchasedProducts", JSON.stringify(parsedDetails));
         // Update state
         setArchivedProductDetails(parsedDetails);
