@@ -82,28 +82,19 @@ export default function ArchivedInventory() {
   };
 
   const handleRemoveProduct = (index: number) => {
-    const updatedProductDetails = [...archivedProductDetails];
-    updatedProductDetails.splice(index, 1);
+      const updatedProductDetails = [...archivedProductDetails];
+      updatedProductDetails.splice(index, 1);
 
-    localStorage.setItem("purchasedProducts", JSON.stringify(updatedProductDetails));
-    setArchivedProductDetails(updatedProductDetails);
-    toast({
-      title: "Product removed!",
-    });
+      localStorage.setItem("purchasedProducts", JSON.stringify(updatedProductDetails));
+      setArchivedProductDetails(updatedProductDetails);
+      toast({
+        title: "Product removed!",
+      });
   };
 
   const confirmRemoveProduct = (index: number) => {
     if (window.confirm("Are you sure you want to permanently remove this product from the archive?")) {
       handleRemoveProduct(index);
-      // Update local storage to reflect the removed product
-      const storedDetails = localStorage.getItem("purchasedProducts");
-      if (storedDetails) {
-        let parsedDetails = JSON.parse(storedDetails);
-        parsedDetails.splice(index, 1); // Remove the product from the array
-        localStorage.setItem("purchasedProducts", JSON.stringify(parsedDetails));
-        // Update state
-        setArchivedProductDetails(parsedDetails);
-      }
     }
   };
 
