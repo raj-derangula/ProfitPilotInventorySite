@@ -40,6 +40,16 @@ const productDetailsSchema = z.object({
   }, {
     message: "Quantity purchased must be a valid integer greater than zero.",
   }),
+  originalQuantityPurchased: z.string().refine((value) => {
+    try {
+      const num = parseInt(value, 10);
+      return !isNaN(num) && num > 0;
+    } catch (e) {
+      return false;
+    }
+  }, {
+    message: "Quantity purchased must be a valid integer greater than zero.",
+  }),
   costPrice: z.string().optional(),
   productImage: z.string().optional(),
 });
@@ -58,6 +68,7 @@ export default function Home() {
       productName: "",
       pricePaid: "",
       quantityPurchased: "",
+      originalQuantityPurchased: "",
       costPrice: "",
       productImage: "",
     },
@@ -99,6 +110,7 @@ export default function Home() {
         form.setValue("productName", productDetails.productName);
         form.setValue("pricePaid", productDetails.pricePaid.toString());
         form.setValue("quantityPurchased", productDetails.quantityPurchased.toString());
+        form.setValue("originalQuantityPurchased", productDetails.quantityPurchased.toString());
         toast({
           title: "Product details extracted!",
           description: `Product Name: ${productDetails.productName}, Price Paid: ${productDetails.pricePaid}, Quantity: ${productDetails.quantityPurchased}`,
@@ -166,6 +178,7 @@ export default function Home() {
     form.setValue("productName", "");
     form.setValue("pricePaid", "");
     form.setValue("quantityPurchased", "");
+    form.setValue("originalQuantityPurchased", "");
     form.setValue("productImage", "https://picsum.photos/200/300"); // Clear the product image
   };
 
@@ -273,6 +286,19 @@ export default function Home() {
                       <FormLabel>Quantity Purchased</FormLabel>
                       <FormControl>
                         <Input placeholder="Quantity Purchased" {...field} />
+                      </FormControl>
+                      <FormDescription>Enter the quantity of the product purchased.</FormDescription>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="originalQuantityPurchased"
+                  render={({field}) => (
+                    <FormItem>
+                      <FormLabel>Original Quantity Purchased</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Original Quantity Purchased" {...field} />
                       </FormControl>
                       <FormDescription>Enter the quantity of the product purchased.</FormDescription>
                     </FormItem>

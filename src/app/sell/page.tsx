@@ -22,6 +22,7 @@ interface ProductDetails {
   productName: string;
   pricePaid: string;
   quantityPurchased: string;
+  originalQuantityPurchased: string;
   costPrice?: string;
   productImage?: string;
 }
@@ -321,4 +322,3 @@ export default function SalesPage() {
     </div>
   );
 }
-

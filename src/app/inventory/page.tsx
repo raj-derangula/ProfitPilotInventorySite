@@ -19,6 +19,7 @@ interface ProductDetails {
   productName: string;
   pricePaid: string;
   quantityPurchased: string;
+  originalQuantityPurchased: string;
   costPrice?: string;
   productImage?: string;
 }
@@ -66,6 +67,7 @@ export default function Inventory() {
         productName: editProductName,
         pricePaid: editPricePaid,
         quantityPurchased: editQuantityPurchased,
+        originalQuantityPurchased: productDetails[selectedProductIndex].originalQuantityPurchased,
         costPrice: editCostPrice,
         productImage: productDetails[selectedProductIndex].productImage, // Keep the same image
       };

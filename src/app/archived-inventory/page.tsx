@@ -19,6 +19,7 @@ interface ProductDetails {
   productName: string;
   pricePaid: string;
   quantityPurchased: string;
+  originalQuantityPurchased: string; // New variable
   costPrice?: string;
   productImage?: string;
 }
@@ -31,6 +32,7 @@ export default function ArchivedInventory() {
   const [editProductName, setEditProductName] = useState("");
   const [editPricePaid, setEditPricePaid] = useState("");
   const [editQuantityPurchased, setEditQuantityPurchased] = useState("");
+  const [editOriginalQuantityPurchased, setEditOriginalQuantityPurchased] = useState(""); // New variable
   const [editCostPrice, setEditCostPrice] = useState("");
   const {toast} = useToast();
 
@@ -52,6 +54,7 @@ export default function ArchivedInventory() {
     setEditProductName(product.productName);
     setEditPricePaid(product.pricePaid);
     setEditQuantityPurchased(product.quantityPurchased);
+    setEditOriginalQuantityPurchased(product.originalQuantityPurchased); // set new variable
     setEditCostPrice(product.costPrice || "");
     setOpen(true);
   };
@@ -63,6 +66,7 @@ export default function ArchivedInventory() {
         productName: editProductName,
         pricePaid: editPricePaid,
         quantityPurchased: editQuantityPurchased,
+        originalQuantityPurchased: editOriginalQuantityPurchased, // update new variable
         costPrice: editCostPrice,
         productImage: archivedProductDetails[selectedProductIndex].productImage, // Keep the same image
       };
@@ -126,6 +130,7 @@ export default function ArchivedInventory() {
                 <div className="flex flex-col space-y-1">
                   <p className="text-lg font-semibold">Price Paid: ${product.pricePaid}</p>
                   <p className="text-lg font-semibold">Quantity Purchased: {product.quantityPurchased}</p>
+                  <p className="text-lg font-semibold">Original Quantity Purchased: {product.originalQuantityPurchased}</p>
                   {product.costPrice && (
                     <p className="text-lg font-semibold">Cost Price: ${product.costPrice}</p>
                   )}
@@ -181,6 +186,17 @@ export default function ArchivedInventory() {
                 id="quantity"
                 value={editQuantityPurchased}
                 onChange={(e) => setEditQuantityPurchased(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="originalQuantity" className="text-right">
+                Original Quantity
+              </Label>
+              <Input
+                id="originalQuantity"
+                value={editOriginalQuantityPurchased}
+                onChange={(e) => setEditOriginalQuantityPurchased(e.target.value)}
                 className="col-span-3"
               />
             </div>
