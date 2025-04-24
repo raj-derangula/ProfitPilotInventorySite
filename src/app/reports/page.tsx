@@ -77,7 +77,7 @@ export default function Reports() {
     let spent = 0;
     let profit = 0;
     let revenue = 0;
-    let filteredSales: SalesData[] = salesData;
+    let filteredSales: SalesData[] = [];
 
     // Calculate total spending
     spent = allPurchasedProducts.reduce((acc: number, product: any) => {
@@ -272,3 +272,4 @@ export default function Reports() {
     </div>
   );
 }
+
