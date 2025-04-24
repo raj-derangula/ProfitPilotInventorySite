@@ -67,7 +67,6 @@ export default function Reports() {
 
   useEffect(() => {
     // Calculate totals for all time on component mount or initial load with today's date
-    const today = new Date();
     calculateTotals(startDate, endDate);
 
   }, [productDetails, salesData, allPurchasedProducts, startDate, endDate]);
@@ -78,14 +77,6 @@ export default function Reports() {
     let profit = 0;
     let revenue = 0;
     let filteredSales: SalesData[] = [];
-
-    // Calculate total spending
-    spent = allPurchasedProducts.reduce((acc: number, product: any) => {
-      const pricePaid = parseFloat(product.pricePaid || "0");
-      const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
-      return acc + pricePaid * quantityPurchased;
-    }, 0);
-
 
     // Filter sales within the date range
     if (start && end) {
@@ -99,21 +90,32 @@ export default function Reports() {
         return saleDate >= start && saleDate <= endOfDay;
       });
     } else {
-      // If no date range is selected, show only today's sales
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      filteredSales = salesData.filter((sale: SalesData) => {
-        const saleDate = new Date(sale.dateOfSale);
-        return saleDate >= todayStart && saleDate <= todayEnd;
-      });
+      filteredSales = salesData;
     }
 
+        // Calculate total spending
+        spent = allPurchasedProducts.reduce((acc: number, product: any) => {
+            const pricePaid = parseFloat(product.pricePaid || "0");
+            const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
+
+            // Check if the product falls within the date range for spending
+            if (start && end) {
+                const purchaseDate = new Date(); // Assuming purchase date is today (for demonstration).  Ideally, you'd store the purchase date with each product.
+                const endOfDay = new Date(end);
+                endOfDay.setHours(23, 59, 59, 999);
+
+                if (purchaseDate >= start && purchaseDate <= endOfDay) {
+                    return acc + pricePaid * quantityPurchased;
+                }
+                return acc; // Skip if purchase date is outside range
+            } else {
+                return acc + pricePaid * quantityPurchased; // Accumulate if no date range
+            }
+        }, 0);
+
     // Calculate total profit and revenue
-    filteredSales.forEach((sale: SalesData) => {
-      sale.productsSold.forEach((soldProduct) => {
+    profit = filteredSales.reduce((acc: number, sale: SalesData) => {
+      return acc + sale.productsSold.reduce((saleAcc, soldProduct) => {
         // Try to find the product in purchasedProducts first
         const product = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
 
@@ -123,14 +125,21 @@ export default function Reports() {
           const salePrice = parseFloat(soldProduct.salePrice || "0");
           const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
           const unitProfit = salePrice - costPrice;
-
-          revenue += salePrice * quantitySold; // Accumulate total revenue
-          profit += unitProfit * quantitySold;
+          return saleAcc + unitProfit * quantitySold;
         } else {
           console.warn(`Product details not found for product: ${soldProduct.productName}`);
+          return saleAcc;
         }
-      });
-    });
+      }, 0);
+    }, 0);
+
+    revenue = filteredSales.reduce((acc: number, sale: SalesData) => {
+      return acc + sale.productsSold.reduce((saleAcc, soldProduct) => {
+        const salePrice = parseFloat(soldProduct.salePrice || "0");
+        const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
+        return saleAcc + salePrice * quantitySold;
+      }, 0);
+    }, 0);
 
     setTotalSpent(spent);
     setTotalProfit(profit);
@@ -274,4 +283,3 @@ export default function Reports() {
     </div>
   );
 }
-
