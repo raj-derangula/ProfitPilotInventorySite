@@ -40,36 +40,35 @@ export default function Reports() {
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [filteredSalesData, setFilteredSalesData] = useState<SalesData[]>([]);
-  const [allPurchasedProducts, setAllPurchasedProducts] = useState<PurchasedProduct[]>([]);
+    const [allPurchasedProducts, setAllPurchasedProducts] = useState<PurchasedProduct[]>([]);
+
+
+    useEffect(() => {
+        // Load product details from local storage
+        const storedProducts = localStorage.getItem("productDetails");
+        if (storedProducts) {
+            setProductDetails(JSON.parse(storedProducts));
+        }
+
+        // Load sales data from local storage
+        const storedSales = localStorage.getItem("sales");
+        if (storedSales) {
+            const parsedSales = JSON.parse(storedSales);
+            // Sort sales data by date in descending order (most recent first)
+            parsedSales.sort((a: SalesData, b: SalesData) => new Date(b.dateOfSale).getTime() - new Date(a.dateOfSale).getTime());
+            setSalesData(parsedSales);
+        }
+        const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
+        if (storedPurchasedProducts) {
+            setAllPurchasedProducts(JSON.parse(storedPurchasedProducts));
+        }
+    }, []);
+
 
   useEffect(() => {
-    // Load product details from local storage
-    const storedProducts = localStorage.getItem("productDetails");
-    if (storedProducts) {
-      setProductDetails(JSON.parse(storedProducts));
-    }
-
-    // Load sales data from local storage
-    const storedSales = localStorage.getItem("sales");
-    if (storedSales) {
-      const parsedSales = JSON.parse(storedSales);
-      // Sort sales data by date in descending order (most recent first)
-      parsedSales.sort((a: SalesData, b: SalesData) => new Date(b.dateOfSale).getTime() - new Date(a.dateOfSale).getTime());
-      setSalesData(parsedSales);
-    }
-
-    // Load purchased products from local storage
-    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
-    if (storedPurchasedProducts) {
-      setAllPurchasedProducts(JSON.parse(storedPurchasedProducts));
-    }
-  }, []);
-
-  useEffect(() => {
-    // Calculate totals for all time on component mount or initial load with today's date
+    // Calculate totals for all time on component mount or initial load
     calculateTotals(startDate, endDate);
-
-  }, [productDetails, salesData, allPurchasedProducts, startDate, endDate]);
+  }, [productDetails, salesData, startDate, endDate, allPurchasedProducts]);
 
 
   const calculateTotals = (start: Date | null, end: Date | null) => {
@@ -93,24 +92,12 @@ export default function Reports() {
       filteredSales = salesData;
     }
 
-        // Calculate total spending
+      // Calculate total spending
         spent = allPurchasedProducts.reduce((acc: number, product: any) => {
             const pricePaid = parseFloat(product.pricePaid || "0");
             const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
 
-            // Check if the product falls within the date range for spending
-            if (start && end) {
-                const purchaseDate = new Date(); // Assuming purchase date is today (for demonstration).  Ideally, you'd store the purchase date with each product.
-                const endOfDay = new Date(end);
-                endOfDay.setHours(23, 59, 59, 999);
-
-                if (purchaseDate >= start && purchaseDate <= endOfDay) {
-                    return acc + pricePaid * quantityPurchased;
-                }
-                return acc; // Skip if purchase date is outside range
-            } else {
-                return acc + pricePaid * quantityPurchased; // Accumulate if no date range
-            }
+            return acc + pricePaid * quantityPurchased;
         }, 0);
 
     // Calculate total profit and revenue
