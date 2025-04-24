@@ -82,14 +82,14 @@ export default function ArchivedInventory() {
   };
 
   const handleRemoveProduct = (index: number) => {
-      const updatedProductDetails = [...archivedProductDetails];
-      updatedProductDetails.splice(index, 1);
+    const updatedProductDetails = [...archivedProductDetails];
+    updatedProductDetails.splice(index, 1);
 
-      localStorage.setItem("purchasedProducts", JSON.stringify(updatedProductDetails));
-      setArchivedProductDetails(updatedProductDetails);
-      toast({
-        title: "Product removed!",
-      });
+    localStorage.setItem("purchasedProducts", JSON.stringify(updatedProductDetails));
+    setArchivedProductDetails(updatedProductDetails);
+    toast({
+      title: "Product removed!",
+    });
   };
 
   const confirmRemoveProduct = (index: number) => {
