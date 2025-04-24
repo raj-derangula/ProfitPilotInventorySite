@@ -95,6 +95,12 @@ export default function Inventory() {
     });
   };
 
+    const confirmRemoveProduct = (index: number) => {
+        if (window.confirm("Are you sure you want to remove this product?")) {
+            handleRemoveProduct(index);
+        }
+    };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10">
       <h1 className="text-3xl font-bold mb-4">Inventory</h1>
@@ -125,7 +131,7 @@ export default function Inventory() {
                   <Button onClick={() => handleEditProduct(index)} variant="secondary">
                     Edit
                   </Button>
-                  <Button onClick={() => handleRemoveProduct(index)} variant="destructive">
+                  <Button onClick={() => confirmRemoveProduct(index)} variant="destructive">
                     Remove
                   </Button>
                 </div>

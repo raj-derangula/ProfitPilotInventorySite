@@ -64,6 +64,7 @@ export default function SalesPage() {
   const {toast} = useToast();
   const router = useRouter();
   const [inventory, setInventory] = useState<ProductDetails[]>([]);
+  const [purchasedProducts, setPurchasedProducts] = useState<ProductDetails[]>([]);
 
   const form = useForm<SalesFormValues>({
     resolver: zodResolver(salesFormSchema),
@@ -89,6 +90,12 @@ export default function SalesPage() {
     const storedInventory = localStorage.getItem("productDetails");
     if (storedInventory) {
       setInventory(JSON.parse(storedInventory));
+    }
+
+    // Load purchased products from local storage
+    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
+    if (storedPurchasedProducts) {
+      setPurchasedProducts(JSON.parse(storedPurchasedProducts));
     }
   }, []);
 
@@ -125,6 +132,7 @@ export default function SalesPage() {
 
     // If all quantities are valid, proceed to update inventory and record sale
     let updatedInventory = [...inventory];
+    let updatedPurchasedProducts = [...purchasedProducts];
 
     for (const productSold of values.productsSold) {
       updatedInventory = updatedInventory.map((product) => {
@@ -148,6 +156,25 @@ export default function SalesPage() {
     localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
     setInventory(updatedInventory);
 
+        // Add the sold products to the purchasedProducts list, or update the quantity if it already exists
+        values.productsSold.forEach(soldProduct => {
+          const existingProductIndex = updatedPurchasedProducts.findIndex(p => p.productName === soldProduct.productName);
+          if (existingProductIndex !== -1) {
+              // Update quantityPurchased if the product already exists
+              updatedPurchasedProducts[existingProductIndex] = {
+                  ...updatedPurchasedProducts[existingProductIndex],
+                  quantityPurchased: (parseInt(updatedPurchasedProducts[existingProductIndex].quantityPurchased, 10) - parseInt(soldProduct.quantitySold, 10)).toString()
+              };
+          }
+      });
+
+    // Save updated inventory to local storage
+    localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
+
+        localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
+        setPurchasedProducts(updatedPurchasedProducts);
+
     // Add the new sale to the list of sales
     setSales([...sales, values]);
     toast({
@@ -160,6 +187,8 @@ export default function SalesPage() {
   const handleGoToInventory = () => {
     router.push("/inventory");
   };
+
+  const today = new Date();
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10">
@@ -271,7 +300,7 @@ export default function SalesPage() {
                             field.onChange(date);
                           }}
                           disabled={(date) =>
-                            date > new Date() || date < new Date("2020-01-01")
+                            date > today || date < new Date("2020-01-01")
                           }
                           initialFocus
                         />

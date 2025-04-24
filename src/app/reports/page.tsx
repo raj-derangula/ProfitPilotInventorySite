@@ -23,6 +23,14 @@ interface SalesData {
   dateOfSale: Date;
 }
 
+interface PurchasedProduct {
+  productName: string;
+  pricePaid: string;
+  quantityPurchased: string;
+  costPrice?: string;
+  productImage?: string;
+}
+
 export default function Reports() {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -32,6 +40,7 @@ export default function Reports() {
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [filteredSalesData, setFilteredSalesData] = useState<SalesData[]>([]);
+  const [purchasedProducts, setPurchasedProducts] = useState<PurchasedProduct[]>([]);
 
   useEffect(() => {
     // Load product details from local storage
@@ -48,12 +57,18 @@ export default function Reports() {
       parsedSales.sort((a: SalesData, b: SalesData) => new Date(b.dateOfSale).getTime() - new Date(a.dateOfSale).getTime());
       setSalesData(parsedSales);
     }
+
+    // Load purchased products from local storage
+    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
+    if (storedPurchasedProducts) {
+      setPurchasedProducts(JSON.parse(storedPurchasedProducts));
+    }
   }, []);
 
   useEffect(() => {
     // Calculate totals for all time on component mount
     calculateTotals(null, null);
-  }, [productDetails, salesData]);
+  }, [productDetails, salesData, purchasedProducts]);
 
   useEffect(() => {
     if (startDate && endDate) {
@@ -62,7 +77,7 @@ export default function Reports() {
       // If either start or end date is cleared, recalculate totals for all time
       calculateTotals(null, null);
     }
-  }, [startDate, endDate, productDetails, salesData]);
+  }, [startDate, endDate, productDetails, salesData, purchasedProducts]);
 
   const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
@@ -70,8 +85,11 @@ export default function Reports() {
     let revenue = 0;
     let filteredSales: SalesData[] = salesData;
 
+    // Combine productDetails and purchasedProducts for total spending calculation
+    const allProducts = [...productDetails, ...purchasedProducts];
+
     // Calculate total spending
-    spent = productDetails.reduce((acc: number, product: ProductDetails) => {
+    spent = allProducts.reduce((acc: number, product: any) => {
       const pricePaid = parseFloat(product.pricePaid || "0");
       const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
       return acc + pricePaid * quantityPurchased;
@@ -88,7 +106,13 @@ export default function Reports() {
     // Calculate total profit and revenue
     filteredSales.forEach((sale: SalesData) => {
       sale.productsSold.forEach((soldProduct) => {
-        const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+        // Try to find the product in productDetails first, then purchasedProducts
+        let product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+
+        if (!product) {
+          product = purchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
+        }
+
         if (product) {
           const pricePaid = parseFloat(product.pricePaid || "0");
           const costPrice = parseFloat(product.costPrice || "0");
@@ -202,7 +226,12 @@ export default function Reports() {
                     let saleSpending = 0;
 
                     sale.productsSold.forEach((soldProduct) => {
-                      const product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+                      // Try to find the product in productDetails first, then purchasedProducts
+                      let product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+
+                      if (!product) {
+                        product = purchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
+                      }
                       if (product) {
                         const pricePaid = parseFloat(product.pricePaid || "0");
                         const costPrice = parseFloat(product.costPrice || "0");

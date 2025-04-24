@@ -73,6 +73,14 @@ export default function Home() {
         localStorage.removeItem("productDetails");
       }
     }
+    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
+    if (storedPurchasedProducts) {
+      try {
+        JSON.parse(storedPurchasedProducts);
+      } catch (e) {
+        localStorage.removeItem("purchasedProducts");
+      }
+    }
   }, []);
 
   const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,17 +137,22 @@ export default function Home() {
   const onSubmit = (values: ProductDetailsFormValues) => {
     // Retrieve existing product details from local storage
     const storedProducts = localStorage.getItem("productDetails");
+    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
+
     // Ensure existingProducts is always an array, even if storedProducts is null or empty
     const existingProducts = storedProducts ? JSON.parse(storedProducts) : [];
+    const existingPurchasedProducts = storedPurchasedProducts ? JSON.parse(storedPurchasedProducts) : [];
 
     // Add the new product to the existing list
     const updatedProducts = Array.isArray(existingProducts) ? [...existingProducts, values] : [values];
+    const updatedPurchasedProducts = Array.isArray(existingPurchasedProducts) ? [...existingPurchasedProducts, values] : [values];
 
     // Filter out products with quantityPurchased equal to 0
     const filteredProducts = updatedProducts.filter(product => parseInt(product.quantityPurchased, 10) > 0);
 
     // Store the updated list in local storage
     localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
+    localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
 
     toast({
       title: "Product added!",
@@ -153,7 +166,7 @@ export default function Home() {
     form.setValue("productName", "");
     form.setValue("pricePaid", "");
     form.setValue("quantityPurchased", "");
-    form.setValue("productImage", ""); // Clear the product image
+    form.setValue("productImage", "https://picsum.photos/200/300"); // Clear the product image
   };
 
   const handleChangeScreenshot = () => {
