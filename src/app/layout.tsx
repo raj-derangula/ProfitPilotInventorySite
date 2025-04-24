@@ -3,7 +3,7 @@ import {Roboto} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton} from "@/components/ui/sidebar";
-import {Home, BarChart2, PackagePlus, DollarSign} from "lucide-react";
+import {Home, BarChart2, PackagePlus, DollarSign, Archive} from "lucide-react";
 import Link from "next/link";
 
 const roboto = Roboto({
@@ -61,6 +61,14 @@ export default function RootLayout({
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
+                  <SidebarMenuItem>
+                      <Link href="/archived-inventory">
+                          <Archive/>
+                          <SidebarMenuButton>
+                              <span>Archived Inventory</span>
+                          </SidebarMenuButton>
+                      </Link>
+                  </SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
           </Sidebar>
@@ -73,4 +81,3 @@ export default function RootLayout({
     </html>
   );
 }
-
