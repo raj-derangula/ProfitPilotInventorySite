@@ -225,9 +225,10 @@ export default function SalesPage() {
                             </SelectTrigger>
                             <SelectContent>
                               {inventory.map((product, inventoryIndex) => {
+                                const unitPrice = (parseFloat(product.pricePaid) / parseFloat(product.quantityPurchased)).toFixed(2);
                                 return parseInt(product.quantityPurchased, 10) > 0 ? (
                                   <SelectItem key={inventoryIndex} value={product.productName}>
-                                    {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
+                                    {`${product.productName} ($${unitPrice}) - Quantity: ${product.quantityPurchased}`}
                                   </SelectItem>
                                 ) : null;
                               })}
