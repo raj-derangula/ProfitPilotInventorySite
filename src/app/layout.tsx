@@ -46,10 +46,10 @@ export default function RootLayout({
                   </Link>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <Link href="/sales">
+                  <Link href="/sell">
                     <DollarSign/>
                     <SidebarMenuButton>
-                      <span>Sales</span>
+                      <span>Sell</span>
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
@@ -73,3 +73,4 @@ export default function RootLayout({
     </html>
   );
 }
+
