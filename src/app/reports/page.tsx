@@ -95,9 +95,12 @@ export default function Reports() {
 
     // Filter sales within the date range
     if (start && end) {
+      const endOfDay = new Date(end);
+      endOfDay.setHours(23, 59, 59, 999);
+
       filteredSales = salesData.filter((sale: SalesData) => {
         const saleDate = new Date(sale.dateOfSale);
-        return saleDate >= start && saleDate <= end;
+        return saleDate >= start && saleDate <= endOfDay;
       });
     }
 
