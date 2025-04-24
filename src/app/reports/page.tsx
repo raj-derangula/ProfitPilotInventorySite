@@ -9,7 +9,7 @@ import {ScrollArea} from "@/components/ui/scroll-area";
 interface ProductDetails {
   productName: string;
   pricePaid: string;
-  quantityPurchased: string;
+  quantity: string;
   costPrice?: string;
   productImage?: string;
 }
@@ -26,7 +26,7 @@ interface SalesData {
 interface PurchasedProduct {
   productName: string;
   pricePaid: string;
-  quantityPurchased: string;
+  quantity: string;
   costPrice?: string;
   productImage?: string;
 }
@@ -95,9 +95,9 @@ export default function Reports() {
       // Calculate total spending
         spent = allPurchasedProducts.reduce((acc: number, product: any) => {
             const pricePaid = parseFloat(product.pricePaid || "0");
-            const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
+            const quantity = parseInt(product.quantity || "0", 10);
 
-            return acc + pricePaid * quantityPurchased;
+            return acc + pricePaid * quantity;
         }, 0);
 
     // Calculate total profit and revenue

@@ -30,7 +30,7 @@ const productDetailsSchema = z.object({
   }, {
     message: "Price paid must be a valid number greater than zero.",
   }),
-  quantityPurchased: z.string().refine((value) => {
+  quantity: z.string().refine((value) => {
     try {
       const num = parseInt(value, 10);
       return !isNaN(num) && num > 0;
@@ -67,7 +67,7 @@ export default function Home() {
     defaultValues: {
       productName: "",
       pricePaid: "",
-      quantityPurchased: "",
+      quantity: "",
       originalQuantityPurchased: "",
       costPrice: "",
       productImage: "",
@@ -109,7 +109,7 @@ export default function Home() {
         const productDetails = await extractProductDetails({screenshotDataUri: dataUri});
         form.setValue("productName", productDetails.productName);
         form.setValue("pricePaid", productDetails.pricePaid.toString());
-        form.setValue("quantityPurchased", productDetails.quantityPurchased.toString());
+        form.setValue("quantity", productDetails.quantityPurchased.toString());
         form.setValue("originalQuantityPurchased", productDetails.quantityPurchased.toString());
         toast({
           title: "Product details extracted!",
@@ -159,8 +159,8 @@ export default function Home() {
     const updatedProducts = Array.isArray(existingProducts) ? [...existingProducts, values] : [values];
     const updatedPurchasedProducts = Array.isArray(existingPurchasedProducts) ? [...existingPurchasedProducts, values] : [values];
 
-    // Filter out products with quantityPurchased equal to 0
-    const filteredProducts = updatedProducts.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+    // Filter out products with quantity equal to 0
+    const filteredProducts = updatedProducts.filter(product => parseInt(product.quantity, 10) > 0);
 
     // Store the updated list in local storage
     localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
@@ -168,7 +168,7 @@ export default function Home() {
 
     toast({
       title: "Product added!",
-      description: `Product Name: ${values.productName}, Price Paid: ${values.pricePaid}, Quantity: ${values.quantityPurchased}`,
+      description: `Product Name: ${values.productName}, Price Paid: ${values.pricePaid}, Quantity: ${values.quantity}`,
     });
     router.push("/inventory"); // Redirect to inventory page after submission
   };
@@ -177,7 +177,7 @@ export default function Home() {
     setScreenshot(null);
     form.setValue("productName", "");
     form.setValue("pricePaid", "");
-    form.setValue("quantityPurchased", "");
+    form.setValue("quantity", "");
     form.setValue("originalQuantityPurchased", "");
     form.setValue("productImage", "https://picsum.photos/200/300"); // Clear the product image
   };
@@ -280,12 +280,12 @@ export default function Home() {
                 />
                 <FormField
                   control={form.control}
-                  name="quantityPurchased"
+                  name="quantity"
                   render={({field}) => (
                     <FormItem>
-                      <FormLabel>Quantity Purchased</FormLabel>
+                      <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Input placeholder="Quantity Purchased" {...field} />
+                        <Input placeholder="Quantity" {...field} />
                       </FormControl>
                       <FormDescription>Enter the quantity of the product purchased.</FormDescription>
                     </FormItem>
@@ -296,7 +296,7 @@ export default function Home() {
                   name="originalQuantityPurchased"
                   render={({field}) => (
                     <FormItem>
-                      <FormLabel>Original Quantity Purchased</FormLabel>
+                      <FormLabel>Original Quantity</FormLabel>
                       <FormControl>
                         <Input placeholder="Original Quantity Purchased" {...field} />
                       </FormControl>

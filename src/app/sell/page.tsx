@@ -21,7 +21,7 @@ import {CalendarIcon} from "lucide-react";
 interface ProductDetails {
   productName: string;
   pricePaid: string;
-  quantityPurchased: string;
+  quantity: string;
   originalQuantityPurchased: string;
   costPrice?: string;
   productImage?: string;
@@ -118,7 +118,7 @@ export default function SalesPage() {
         return;
       }
 
-      const purchased = parseInt(inventoryProduct.quantityPurchased, 10);
+      const purchased = parseInt(inventoryProduct.quantity, 10);
       const quantitySold = parseInt(productSold.quantitySold, 10);
 
       if (quantitySold > purchased) {
@@ -138,20 +138,20 @@ export default function SalesPage() {
     for (const productSold of values.productsSold) {
       updatedInventory = updatedInventory.map((product) => {
         if (product.productName === productSold.productName) {
-          const purchased = parseInt(product.quantityPurchased, 10);
+          const purchased = parseInt(product.quantity, 10);
           const quantitySold = parseInt(productSold.quantitySold, 10);
           const remaining = purchased - quantitySold;
           return {
             ...product,
-            quantityPurchased: remaining.toString(),
+            quantity: remaining.toString(),
           };
         }
         return product;
       });
     }
 
-    // Filter out products with quantityPurchased equal to 0
-    updatedInventory = updatedInventory.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+    // Filter out products with quantity equal to 0
+    updatedInventory = updatedInventory.filter(product => parseInt(product.quantity, 10) > 0);
 
     // Save updated inventory to local storage
     localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
@@ -161,10 +161,10 @@ export default function SalesPage() {
         values.productsSold.forEach(soldProduct => {
           const existingProductIndex = updatedPurchasedProducts.findIndex(p => p.productName === soldProduct.productName);
           if (existingProductIndex !== -1) {
-              // Update quantityPurchased if the product already exists
+              // Update quantity if the product already exists
               updatedPurchasedProducts[existingProductIndex] = {
                   ...updatedPurchasedProducts[existingProductIndex],
-                  quantityPurchased: (parseInt(updatedPurchasedProducts[existingProductIndex].quantityPurchased, 10) - parseInt(soldProduct.quantitySold, 10)).toString()
+                  quantity: (parseInt(updatedPurchasedProducts[existingProductIndex].quantity, 10) - parseInt(soldProduct.quantitySold, 10)).toString()
               };
           }
       });
@@ -226,9 +226,10 @@ export default function SalesPage() {
                             </SelectTrigger>
                             <SelectContent>
                               {inventory.map((product, inventoryIndex) => {
-                                return parseInt(product.quantityPurchased, 10) > 0 ? (
+                                const unitPrice = (parseFloat(product.pricePaid) / parseFloat(product.quantity)).toFixed(2);
+                                return parseInt(product.quantity, 10) > 0 ? (
                                   <SelectItem key={inventoryIndex} value={product.productName}>
-                                    {`${product.productName} ($${product.pricePaid}) - Quantity: ${product.quantityPurchased}`}
+                                    {`${product.productName} ($${unitPrice}) - Quantity: ${product.quantity}`}
                                   </SelectItem>
                                 ) : null;
                               })}

@@ -18,7 +18,7 @@ import {useToast} from "@/hooks/use-toast";
 interface ProductDetails {
   productName: string;
   pricePaid: string;
-  quantityPurchased: string;
+  quantity: string;
   originalQuantityPurchased: string;
   costPrice?: string;
   productImage?: string;
@@ -31,7 +31,7 @@ export default function Inventory() {
   const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
   const [editProductName, setEditProductName] = useState("");
   const [editPricePaid, setEditPricePaid] = useState("");
-  const [editQuantityPurchased, setEditQuantityPurchased] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
   const [editCostPrice, setEditCostPrice] = useState("");
   const {toast} = useToast();
 
@@ -40,8 +40,8 @@ export default function Inventory() {
     const storedDetails = localStorage.getItem("productDetails");
     if (storedDetails) {
       const parsedDetails = JSON.parse(storedDetails);
-      // Filter out products with quantityPurchased equal to 0
-      const filteredDetails = parsedDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
+      // Filter out products with quantity equal to 0
+      const filteredDetails = parsedDetails.filter(product => parseInt(product.quantity, 10) > 0);
       setProductDetails(filteredDetails);
     }
   }, []);
@@ -55,7 +55,7 @@ export default function Inventory() {
     setSelectedProductIndex(index);
     setEditProductName(product.productName);
     setEditPricePaid(product.pricePaid);
-    setEditQuantityPurchased(product.quantityPurchased);
+    setEditQuantity(product.quantity);
     setEditCostPrice(product.costPrice || "");
     setOpen(true);
   };
@@ -66,7 +66,7 @@ export default function Inventory() {
       updatedProductDetails[selectedProductIndex] = {
         productName: editProductName,
         pricePaid: editPricePaid,
-        quantityPurchased: editQuantityPurchased,
+        quantity: editQuantity,
         originalQuantityPurchased: productDetails[selectedProductIndex].originalQuantityPurchased,
         costPrice: editCostPrice,
         productImage: productDetails[selectedProductIndex].productImage, // Keep the same image
@@ -77,7 +77,7 @@ export default function Inventory() {
       setOpen(false);
       toast({
         title: "Product updated!",
-        description: `Product Name: ${editProductName}, Price Paid: ${editPricePaid}, Quantity: ${editQuantityPurchased}`,
+        description: `Product Name: ${editProductName}, Price Paid: ${editPricePaid}, Quantity: ${editQuantity}`,
       });
     }
   };
@@ -103,7 +103,7 @@ export default function Inventory() {
         parsedDetails.splice(index, 1); // Remove the product from the array
         localStorage.setItem("productDetails", JSON.stringify(parsedDetails));
         // Update state
-        setProductDetails(parsedDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0));
+        setProductDetails(parsedDetails.filter(product => parseInt(product.quantity, 10) > 0));
       }
     }
   };
@@ -130,7 +130,7 @@ export default function Inventory() {
                 )}
                 <div className="flex flex-col space-y-1">
                   <p className="text-lg font-semibold">Price Paid: ${product.pricePaid}</p>
-                  <p className="text-lg font-semibold">Quantity Purchased: {product.quantityPurchased}</p>
+                  <p className="text-lg font-semibold">Quantity: {product.quantity}</p>
                   {product.costPrice && (
                     <p className="text-lg font-semibold">Cost Price: ${product.costPrice}</p>
                   )}
@@ -184,8 +184,8 @@ export default function Inventory() {
               </Label>
               <Input
                 id="quantity"
-                value={editQuantityPurchased}
-                onChange={(e) => setEditQuantityPurchased(e.target.value)}
+                value={editQuantity}
+                onChange={(e) => setEditQuantity(e.target.value)}
                 className="col-span-3"
               />
             </div>
