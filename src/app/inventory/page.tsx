@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
@@ -30,9 +29,9 @@ export default function Inventory() {
   const [open, setOpen] = useState(false);
   const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
   const [editProductName, setEditProductName] = useState("");
-  const [editPricePaid, setEditPricePaid] = useState("");
-  const [editQuantityPurchased, setEditQuantityPurchased] = useState("");
-  const [editCostPrice, setEditCostPrice] = useState("");
+  const [editPricePaid, setEditPricePaid = useState("");
+  const [editQuantityPurchased, setEditQuantityPurchased = useState("");
+  const [editCostPrice, setEditCostPrice = useState("");
   const {toast} = useToast();
 
   useEffect(() => {
@@ -85,11 +84,8 @@ export default function Inventory() {
     const updatedProductDetails = [...productDetails];
     updatedProductDetails.splice(index, 1);
 
-    // Filter out products with quantityPurchased equal to 0
-    const filteredProductDetails = updatedProductDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0);
-
-    localStorage.setItem("productDetails", JSON.stringify(filteredProductDetails));
-    setProductDetails(filteredProductDetails);
+    localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
+    setProductDetails(updatedProductDetails);
     toast({
       title: "Product removed!",
     });
@@ -98,6 +94,15 @@ export default function Inventory() {
     const confirmRemoveProduct = (index: number) => {
         if (window.confirm("Are you sure you want to remove this product?")) {
             handleRemoveProduct(index);
+            // Update local storage to reflect the removed product
+            const storedDetails = localStorage.getItem("productDetails");
+            if (storedDetails) {
+                let parsedDetails = JSON.parse(storedDetails);
+                parsedDetails.splice(index, 1); // Remove the product from the array
+                localStorage.setItem("productDetails", JSON.stringify(parsedDetails));
+                // Update state
+                setProductDetails(parsedDetails.filter(product => parseInt(product.quantityPurchased, 10) > 0));
+            }
         }
     };
 
