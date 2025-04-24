@@ -94,6 +94,15 @@ export default function ArchivedInventory() {
 
   const confirmRemoveProduct = (index: number) => {
     if (window.confirm("Are you sure you want to permanently remove this product from the archive?")) {
+      // Update local storage to reflect the removed product
+      const storedDetails = localStorage.getItem("purchasedProducts");
+      if (storedDetails) {
+        let parsedDetails = JSON.parse(storedDetails);
+        parsedDetails.splice(index, 1); // Remove the product from the array
+        localStorage.setItem("purchasedProducts", JSON.stringify(parsedDetails));
+        // Update state
+        setArchivedProductDetails(parsedDetails);
+      }
       handleRemoveProduct(index);
     }
   };
