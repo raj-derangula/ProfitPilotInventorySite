@@ -89,7 +89,9 @@ export default function Reports() {
 
     // Filter sales within the date range
     if (start && end) {
+      // Create a new date object from the end date to avoid modifying the original
       const endOfDay = new Date(end);
+      // Set the time to the end of the day (23:59:59)
       endOfDay.setHours(23, 59, 59, 999);
 
       filteredSales = salesData.filter((sale: SalesData) => {
