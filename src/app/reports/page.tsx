@@ -66,18 +66,12 @@ export default function Reports() {
   }, []);
 
   useEffect(() => {
-    // Calculate totals for all time on component mount
-    calculateTotals(null, null);
-  }, [productDetails, salesData, allPurchasedProducts]);
+    // Calculate totals for all time on component mount or initial load with today's date
+    const today = new Date();
+    calculateTotals(startDate, endDate);
 
-  useEffect(() => {
-    if (startDate && endDate) {
-      calculateTotals(startDate, endDate);
-    } else {
-      // If either start or end date is cleared, recalculate totals for all time
-      calculateTotals(null, null);
-    }
-  }, [startDate, endDate, productDetails, salesData, allPurchasedProducts]);
+  }, [productDetails, salesData, allPurchasedProducts, startDate, endDate]);
+
 
   const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
@@ -101,6 +95,17 @@ export default function Reports() {
       filteredSales = salesData.filter((sale: SalesData) => {
         const saleDate = new Date(sale.dateOfSale);
         return saleDate >= start && saleDate <= endOfDay;
+      });
+    } else {
+      // If no date range is selected, show only today's sales
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      filteredSales = salesData.filter((sale: SalesData) => {
+        const saleDate = new Date(sale.dateOfSale);
+        return saleDate >= todayStart && saleDate <= todayEnd;
       });
     }
 
