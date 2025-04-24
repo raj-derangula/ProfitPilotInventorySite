@@ -103,7 +103,16 @@ export default function ArchivedInventory() {
         // Update state
         setArchivedProductDetails(parsedDetails);
       }
-      handleRemoveProduct(index);
+      // Correctly call handleRemoveProduct AFTER updating local storage and state
+        setArchivedProductDetails(prevDetails => {
+            const newDetails = [...prevDetails];
+            newDetails.splice(index, 1);
+            localStorage.setItem("purchasedProducts", JSON.stringify(newDetails));
+            return newDetails;
+        });
+        toast({
+            title: "Product removed!",
+        });
     }
   };
 
