@@ -40,7 +40,7 @@ export default function Reports() {
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [filteredSalesData, setFilteredSalesData] = useState<SalesData[]>([]);
-  const [purchasedProducts, setPurchasedProducts] = useState<PurchasedProduct[]>([]);
+    const [allPurchasedProducts, setAllPurchasedProducts] = useState<PurchasedProduct[]>([]);
 
   useEffect(() => {
     // Load product details from local storage
@@ -60,24 +60,24 @@ export default function Reports() {
 
     // Load purchased products from local storage
     const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
-    if (storedPurchasedProducts) {
-      setPurchasedProducts(JSON.parse(storedPurchasedProducts));
-    }
+      if (storedPurchasedProducts) {
+          setAllPurchasedProducts(JSON.parse(storedPurchasedProducts));
+      }
   }, []);
 
-  useEffect(() => {
-    // Calculate totals for all time on component mount
-    calculateTotals(null, null);
-  }, [productDetails, salesData, purchasedProducts]);
+    useEffect(() => {
+        // Calculate totals for all time on component mount
+        calculateTotals(null, null);
+    }, [productDetails, salesData, allPurchasedProducts]);
 
-  useEffect(() => {
-    if (startDate && endDate) {
-      calculateTotals(startDate, endDate);
-    } else {
-      // If either start or end date is cleared, recalculate totals for all time
-      calculateTotals(null, null);
-    }
-  }, [startDate, endDate, productDetails, salesData, purchasedProducts]);
+    useEffect(() => {
+        if (startDate && endDate) {
+            calculateTotals(startDate, endDate);
+        } else {
+            // If either start or end date is cleared, recalculate totals for all time
+            calculateTotals(null, null);
+        }
+    }, [startDate, endDate, productDetails, salesData, allPurchasedProducts]);
 
   const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
@@ -85,15 +85,13 @@ export default function Reports() {
     let revenue = 0;
     let filteredSales: SalesData[] = salesData;
 
-    // Combine productDetails and purchasedProducts for total spending calculation
-    const allProducts = [...productDetails, ...purchasedProducts];
-
     // Calculate total spending
-    spent = allProducts.reduce((acc: number, product: any) => {
-      const pricePaid = parseFloat(product.pricePaid || "0");
-      const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
-      return acc + pricePaid * quantityPurchased;
-    }, 0);
+      spent = allPurchasedProducts.reduce((acc: number, product: any) => {
+          const pricePaid = parseFloat(product.pricePaid || "0");
+          const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
+          return acc + pricePaid * quantityPurchased;
+      }, 0);
+
 
     // Filter sales within the date range
     if (start && end) {
@@ -106,24 +104,16 @@ export default function Reports() {
     // Calculate total profit and revenue
     filteredSales.forEach((sale: SalesData) => {
       sale.productsSold.forEach((soldProduct) => {
-        // Try to find the product in productDetails first, then purchasedProducts
-        let product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
-
-        if (!product) {
-          product = purchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
-        }
+        // Try to find the product in purchasedProducts first
+        const product = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
 
         if (product) {
           const pricePaid = parseFloat(product.pricePaid || "0");
-          const costPrice = parseFloat(product.costPrice || "0");
+          const costPrice = parseFloat(product.costPrice || "0") || pricePaid;
           const salePrice = parseFloat(soldProduct.salePrice || "0");
           const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
-          let unitProfit = salePrice - pricePaid;
+          const unitProfit = salePrice - costPrice;
 
-          // If cost price is available, use that for profit calculation
-          if (product.costPrice) {
-            unitProfit = salePrice - costPrice;
-          }
           revenue += salePrice * quantitySold; // Accumulate total revenue
           profit += unitProfit * quantitySold;
         } else {
@@ -226,23 +216,15 @@ export default function Reports() {
                     let saleSpending = 0;
 
                     sale.productsSold.forEach((soldProduct) => {
-                      // Try to find the product in productDetails first, then purchasedProducts
-                      let product = productDetails.find((p: ProductDetails) => p.productName === soldProduct.productName);
+                        const product = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
 
-                      if (!product) {
-                        product = purchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
-                      }
                       if (product) {
                         const pricePaid = parseFloat(product.pricePaid || "0");
-                        const costPrice = parseFloat(product.costPrice || "0");
+                        const costPrice = parseFloat(product.costPrice || "0") || pricePaid;
                         const salePrice = parseFloat(soldProduct.salePrice || "0");
                         const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
-                        let unitProfit = salePrice - pricePaid;
+                        const unitProfit = salePrice - costPrice;
 
-                        // If cost price is available, use that for profit calculation
-                        if (product.costPrice) {
-                          unitProfit = salePrice - costPrice;
-                        }
                         saleRevenue += salePrice * quantitySold; // Accumulate total revenue
                         saleProfit += unitProfit * quantitySold;
                         saleSpending += pricePaid * quantitySold;
