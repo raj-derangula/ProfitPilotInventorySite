@@ -40,7 +40,7 @@ export default function Reports() {
   const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [filteredSalesData, setFilteredSalesData] = useState<SalesData[]>([]);
-    const [allPurchasedProducts, setAllPurchasedProducts] = useState<PurchasedProduct[]>([]);
+  const [allPurchasedProducts, setAllPurchasedProducts] = useState<PurchasedProduct[]>([]);
 
   useEffect(() => {
     // Load product details from local storage
@@ -60,24 +60,24 @@ export default function Reports() {
 
     // Load purchased products from local storage
     const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
-      if (storedPurchasedProducts) {
-          setAllPurchasedProducts(JSON.parse(storedPurchasedProducts));
-      }
+    if (storedPurchasedProducts) {
+      setAllPurchasedProducts(JSON.parse(storedPurchasedProducts));
+    }
   }, []);
 
-    useEffect(() => {
-        // Calculate totals for all time on component mount
-        calculateTotals(null, null);
-    }, [productDetails, salesData, allPurchasedProducts]);
+  useEffect(() => {
+    // Calculate totals for all time on component mount
+    calculateTotals(null, null);
+  }, [productDetails, salesData, allPurchasedProducts]);
 
-    useEffect(() => {
-        if (startDate && endDate) {
-            calculateTotals(startDate, endDate);
-        } else {
-            // If either start or end date is cleared, recalculate totals for all time
-            calculateTotals(null, null);
-        }
-    }, [startDate, endDate, productDetails, salesData, allPurchasedProducts]);
+  useEffect(() => {
+    if (startDate && endDate) {
+      calculateTotals(startDate, endDate);
+    } else {
+      // If either start or end date is cleared, recalculate totals for all time
+      calculateTotals(null, null);
+    }
+  }, [startDate, endDate, productDetails, salesData, allPurchasedProducts]);
 
   const calculateTotals = (start: Date | null, end: Date | null) => {
     let spent = 0;
@@ -86,11 +86,11 @@ export default function Reports() {
     let filteredSales: SalesData[] = salesData;
 
     // Calculate total spending
-      spent = allPurchasedProducts.reduce((acc: number, product: any) => {
-          const pricePaid = parseFloat(product.pricePaid || "0");
-          const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
-          return acc + pricePaid * quantityPurchased;
-      }, 0);
+    spent = allPurchasedProducts.reduce((acc: number, product: any) => {
+      const pricePaid = parseFloat(product.pricePaid || "0");
+      const quantityPurchased = parseInt(product.quantityPurchased || "0", 10);
+      return acc + pricePaid * quantityPurchased;
+    }, 0);
 
 
     // Filter sales within the date range
@@ -216,7 +216,7 @@ export default function Reports() {
                     let saleSpending = 0;
 
                     sale.productsSold.forEach((soldProduct) => {
-                        const product = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
+                      const product = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === soldProduct.productName);
 
                       if (product) {
                         const pricePaid = parseFloat(product.pricePaid || "0");
