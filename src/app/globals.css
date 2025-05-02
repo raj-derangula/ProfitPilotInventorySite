@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import 'react-image-crop/dist/ReactCrop.css';
 
 /*body {
   font-family: Arial, Helvetica, sans-serif;
@@ -14,7 +15,7 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 142 92% 20%; /* Even Darker Forest green */
+    --primary: 142 92% 15%; /* Even Darker Forest green */
     --primary-foreground: 0 0% 98%; /* Ensure contrast */
     --secondary: 142 15% 94%; /* Lighter, slightly green-tinted secondary */
     --secondary-foreground: 142 50% 20%; /* Darker green for secondary text */
@@ -35,7 +36,7 @@
     --radius: 0.75rem; /* Slightly larger radius for softer corners */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 142 92% 20%; /* Match primary */
+    --sidebar-primary: 142 92% 15%; /* Match primary */
     --sidebar-primary-foreground: 0 0% 98%; /* Match primary foreground */
     --sidebar-accent: 142 15% 94%; /* Match secondary */
     --sidebar-accent-foreground: 142 50% 20%; /* Match secondary foreground */
@@ -228,4 +229,20 @@ form {
 
 label {
     @apply font-medium;
+}
+
+/* Crop styles */
+.ReactCrop__crop-selection {
+  border: 2px dashed var(--color-primary);
+}
+
+.ReactCrop__drag-handle {
+  border: 1px solid #eee;
+  width: 8px;
+  height: 8px;
+}
+
+.ReactCrop__drag-handle::after {
+  width: 8px;
+  height: 8px;
 }

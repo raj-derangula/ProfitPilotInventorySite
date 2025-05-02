@@ -1,3 +1,4 @@
+// Using server directive tells nextjs that this is backend code.
 "use client";
 
 import {useState, useEffect, useRef} from "react";
@@ -5,11 +6,11 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
-import {Checkbox} from "@/components/ui/checkbox"; // Import Checkbox
+import {Checkbox} from "@/components/ui/checkbox";
 import {useToast} from "@/hooks/use-toast";
 import {extractProductDetails} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit} from "lucide-react"; // Added Edit icon
+import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop} from "lucide-react"; // Added Crop icon
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
@@ -17,6 +18,17 @@ import {zodResolver} from "@hookform/resolvers/zod";
 import {useRouter} from "next/navigation";
 import Image from 'next/image';
 import { cn } from "@/lib/utils";
+import ReactCrop, { type Crop as CropType, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogClose
+} from "@/components/ui/dialog";
+
 
 // Define the shape of the product data stored in localStorage
 interface StoredProductDetails {
@@ -25,7 +37,7 @@ interface StoredProductDetails {
   quantity: string; // Current stock or final quantity in archive
   originalQuantityPurchased: string;
   costPrice?: string; // Unit cost
-  productImage?: string;
+  productImage?: string; // Can be a data URI or placeholder URL
 }
 
 // Schema for the main form and pending products
@@ -82,7 +94,7 @@ interface ProductDetailsFormValues extends z.infer<typeof productDetailsSchema> 
 // Separate interface for pending products state to handle edits
 interface PendingProduct extends ProductDetailsFormValues {
     screenshotDataUri?: string; // Keep the original full screenshot for reference
-    // productImage field from ProductDetailsFormValues will hold the current image (original screenshot or user-uploaded)
+    // productImage field from ProductDetailsFormValues will hold the current image (cropped or original)
 }
 
 export default function Home() {
@@ -95,8 +107,17 @@ export default function Home() {
   const {toast} = useToast();
   const router = useRouter();
   const screenshotFileInputRef = useRef<HTMLInputElement>(null); // Ref for screenshot input
-  const pendingProductImageInputRef = useRef<HTMLInputElement>(null); // Ref for pending product image input
+  const pendingProductImageInputRef = useRef<HTMLInputElement>(null); // Ref for pending product image input (for replacing screenshot)
   const [pendingProductImageIndex, setPendingProductImageIndex] = useState<number | null>(null); // Index of pending product to update image for
+
+  // Cropping State
+  const [crop, setCrop] = useState<CropType>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const [openCropDialog, setOpenCropDialog] = useState(false);
+  const [cropDialogImageSrc, setCropDialogImageSrc] = useState<string | null>(null);
+  const [cropDialogProductIndex, setCropDialogProductIndex] = useState<number | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
 
   const form = useForm<ProductDetailsFormValues>({
     resolver: zodResolver(productDetailsSchema),
@@ -240,15 +261,15 @@ export default function Home() {
         const productDetails = await extractProductDetails({ screenshotDataUri: dataUri });
         const quantity = Math.max(1, productDetails.quantityPurchased);
 
-        // Use the full screenshot data URI as the initial productImage
+        // Use the full screenshot data URI as the initial productImage and screenshotDataUri
         const productData: PendingProduct = {
             productName: productDetails.productName,
             pricePaid: productDetails.pricePaid.toString(),
             quantity: quantity.toString(),
             originalQuantityPurchased: quantity.toString(), // Set original quantity from AI
             costPrice: "", // Default cost price
-            productImage: dataUri, // Use screenshot as initial image
-            screenshotDataUri: dataUri, // Keep original screenshot for reference
+            productImage: dataUri, // Use screenshot as final product image initially
+            screenshotDataUri: dataUri, // Store the original screenshot separately
         };
 
         // Check if approval is required
@@ -416,15 +437,15 @@ export default function Home() {
         });
     };
 
-    // Trigger file input for a specific pending product
-    const handleEditPendingProductImage = (index: number) => {
+    // Trigger file input for a specific pending product to REPLACE the image
+    const handleReplacePendingProductImage = (index: number) => {
         setPendingProductImageIndex(index);
         if (pendingProductImageInputRef.current) {
             pendingProductImageInputRef.current.click();
         }
     };
 
-     // Handle the file selection for pending product image
+     // Handle the file selection for replacing pending product image
     const handlePendingProductImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || pendingProductImageIndex === null) {
@@ -439,18 +460,19 @@ export default function Home() {
                 reader.readAsDataURL(file);
             });
 
-            // Update the specific pending product's productImage
+            // Update the specific pending product's productImage AND screenshotDataUri
             setPendingProducts(prev => {
                 const updated = [...prev];
                 if (updated[pendingProductImageIndex]) {
                     updated[pendingProductImageIndex].productImage = dataUri;
+                    updated[pendingProductImageIndex].screenshotDataUri = dataUri; // Also update the source for cropping
                 }
                 return updated;
             });
 
             toast({
-                title: "Image Updated",
-                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} updated. Click Approve to save.`,
+                title: "Image Replaced",
+                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} replaced. You can crop it or approve directly.`,
             });
 
         } catch (error) {
@@ -487,15 +509,14 @@ export default function Home() {
              return;
         }
 
-        // Ensure original quantity matches current quantity on approval if not edited separately
-        // The productToApprove already holds the potentially edited values
+        // The productToApprove already holds the potentially edited values including the productImage (which could be cropped)
         const dataToInventory: ProductDetailsFormValues = {
             productName: productToApprove.productName,
             pricePaid: productToApprove.pricePaid,
             quantity: productToApprove.quantity,
             originalQuantityPurchased: productToApprove.originalQuantityPurchased, // Use the value from pending state
             costPrice: productToApprove.costPrice,
-            productImage: productToApprove.productImage, // Pass the final image (screenshot or uploaded)
+            productImage: productToApprove.productImage, // Pass the final image (original, replaced, or cropped)
         };
 
         addProductToInventory(dataToInventory); // Add/Update the product
@@ -520,6 +541,132 @@ export default function Home() {
             variant: "destructive",
         });
     };
+
+    // --- Cropping Logic ---
+
+    function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+        const { width, height } = e.currentTarget;
+        // Suggest a centered 1:1 crop initially
+        setCrop(centerCrop(
+          makeAspectCrop(
+            {
+              unit: '%',
+              width: 90, // Start with a large crop area
+            },
+            1 / 1, // Aspect ratio 1:1
+            width,
+            height
+          ),
+          width,
+          height
+        ));
+    }
+
+    function getCroppedImg(
+        image: HTMLImageElement,
+        crop: PixelCrop,
+        fileName: string
+    ): Promise<string> {
+        const canvas = document.createElement("canvas");
+        const scaleX = image.naturalWidth / image.width;
+        const scaleY = image.naturalHeight / image.height;
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        const ctx = canvas.getContext("2d");
+
+        if (!ctx) {
+            return Promise.reject(new Error("Canvas context not available"));
+        }
+
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.width = crop.width * pixelRatio;
+        canvas.height = crop.height * pixelRatio;
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        ctx.imageSmoothingQuality = "high";
+
+        ctx.drawImage(
+            image,
+            crop.x * scaleX,
+            crop.y * scaleY,
+            crop.width * scaleX,
+            crop.height * scaleY,
+            0,
+            0,
+            crop.width,
+            crop.height
+        );
+
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Canvas is empty"));
+                    return;
+                }
+                // Convert blob to data URL
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            }, "image/png", 1); // Use PNG format for higher quality
+        });
+    }
+
+    const handleOpenCropDialog = (index: number) => {
+        const product = pendingProducts[index];
+        if (product && product.screenshotDataUri) { // Use screenshotDataUri as source for cropping
+            setCropDialogImageSrc(product.screenshotDataUri);
+            setCropDialogProductIndex(index);
+            setOpenCropDialog(true);
+             // Reset crop state when opening dialog
+             setCrop(undefined);
+             setCompletedCrop(undefined);
+        } else {
+             toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Original screenshot image not found for cropping.",
+             });
+        }
+    };
+
+    const handleApplyCrop = async () => {
+        if (completedCrop?.width && completedCrop?.height && imgRef.current && cropDialogProductIndex !== null) {
+            try {
+                const croppedImageDataUrl = await getCroppedImg(
+                    imgRef.current,
+                    completedCrop,
+                    `cropped-${pendingProducts[cropDialogProductIndex].productName}.png`
+                );
+                // Update the productImage for the specific pending product
+                setPendingProducts(prev => {
+                    const updated = [...prev];
+                    if (updated[cropDialogProductIndex]) {
+                        updated[cropDialogProductIndex].productImage = croppedImageDataUrl;
+                    }
+                    return updated;
+                });
+                setOpenCropDialog(false);
+                toast({
+                    title: "Image Cropped",
+                    description: `Image for ${pendingProducts[cropDialogProductIndex].productName} cropped successfully. Click Approve to save.`,
+                });
+            } catch (e) {
+                console.error("Crop failed", e);
+                 toast({
+                    variant: "destructive",
+                    title: "Cropping Failed",
+                    description: "Could not crop the image. Please try again.",
+                 });
+            }
+        } else {
+             toast({
+                variant: "destructive",
+                title: "Crop Error",
+                description: "Please select a crop area first.",
+             });
+        }
+    };
+
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4 space-y-8">
@@ -598,7 +745,7 @@ export default function Home() {
               className="hidden"
               onChange={handleScreenshotUpload}
               disabled={isProcessingUploads}
-              multiple
+              multiple // Allow multiple file selection
               ref={screenshotFileInputRef} // Use the ref here
             />
              {screenshotPreview && !isProcessingUploads && (
@@ -741,14 +888,14 @@ export default function Home() {
                     <CardDescription>Review, edit, and approve or discard products extracted from screenshots.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Hidden file input for pending product images */}
+                    {/* Hidden file input for replacing pending product images */}
                     <Input
                         id="pending-product-image-upload"
                         type="file"
                         accept="image/png, image/jpeg, image/gif"
                         className="hidden"
                         onChange={handlePendingProductImageUpload}
-                        ref={pendingProductImageInputRef} // Use the ref here
+                        ref={pendingProductImageInputRef}
                     />
                     {pendingProducts.map((product, index) => (
                         <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-all hover:shadow-md">
@@ -761,32 +908,46 @@ export default function Home() {
                                  </Button>
                             </div>
                             <div className="flex flex-col md:flex-row gap-6"> {/* Increased gap */}
-                                {/* Product Image Upload/Preview */}
+                                {/* Product Image and Action Buttons */}
                                 <div className="relative w-full md:w-32 h-32 flex-shrink-0 group/image">
                                     {product.productImage ? (
                                         <Image
-                                            src={product.productImage} // Display current image (screenshot or uploaded)
+                                            src={product.productImage} // Display current image (original, replaced, or cropped)
                                             alt={product.productName || 'Pending Product Image'}
                                             layout="fill"
-                                            objectFit="cover"
-                                            className="rounded-md"
+                                            objectFit="cover" // Use cover to fill the square
+                                            className="rounded-md border" // Added border
                                             data-ai-hint="pending product item"
                                         />
                                     ) : (
-                                        <div className="w-full h-full rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                                        <div className="w-full h-full rounded-md bg-muted border flex items-center justify-center text-muted-foreground">
                                             <ImageIcon className="h-10 w-10" />
                                         </div>
                                     )}
-                                    {/* Edit Image Button */}
-                                     <Button
-                                        variant="secondary"
-                                        size="icon"
-                                        className="absolute bottom-1 right-1 h-7 w-7 opacity-0 group-hover/image:opacity-100 transition-opacity btn" // Added btn class
-                                        onClick={() => handleEditPendingProductImage(index)}
-                                        aria-label="Change product image"
-                                    >
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
+                                    {/* Image Action Buttons */}
+                                     <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover/image:opacity-100 transition-opacity">
+                                         <Button
+                                            variant="secondary"
+                                            size="icon"
+                                            className="h-7 w-7 btn" // Added btn class
+                                            onClick={() => handleOpenCropDialog(index)} // Open crop dialog
+                                            aria-label="Crop product image"
+                                            title="Crop Image"
+                                            disabled={!product.screenshotDataUri} // Disable if no original screenshot
+                                        >
+                                            <Crop className="h-4 w-4" />
+                                        </Button>
+                                         <Button
+                                            variant="secondary"
+                                            size="icon"
+                                            className="h-7 w-7 btn" // Added btn class
+                                            onClick={() => handleReplacePendingProductImage(index)} // Replace image
+                                            aria-label="Replace product image"
+                                            title="Replace Image"
+                                        >
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-grow">
@@ -844,6 +1005,45 @@ export default function Home() {
                 </CardContent>
             </Card>
         )}
+
+       {/* Crop Dialog */}
+       <Dialog open={openCropDialog} onOpenChange={setOpenCropDialog}>
+         <DialogContent className="sm:max-w-[600px] md:max-w-[800px] lg:max-w-[1000px]"> {/* Make dialog wider */}
+           <DialogHeader>
+             <DialogTitle>Crop Product Image</DialogTitle>
+             <DialogDescription>
+               Select the area for the product image. The original screenshot is used as the source.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="py-4 max-h-[70vh] overflow-auto flex justify-center items-center">
+             {cropDialogImageSrc && (
+               <ReactCrop
+                 crop={crop}
+                 onChange={c => setCrop(c)}
+                 onComplete={c => setCompletedCrop(c)}
+                 aspect={1} // Keep aspect ratio 1:1 for consistency
+                 className="max-w-full max-h-full"
+               >
+                 <img
+                   ref={imgRef}
+                   alt="Crop preview"
+                   src={cropDialogImageSrc}
+                   style={{ maxHeight: '65vh' }} // Limit image height in dialog
+                   onLoad={onImageLoad}
+                 />
+               </ReactCrop>
+             )}
+           </div>
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setOpenCropDialog(false)}>
+               Cancel
+             </Button>
+             <Button onClick={handleApplyCrop} className="btn-primary">
+               Apply Crop
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
 
     </div>
   );
