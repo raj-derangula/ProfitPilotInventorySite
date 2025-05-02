@@ -18,18 +18,20 @@ import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
 import {Archive, Edit, Trash2, PlusCircle, PackageSearch, DollarSign} from "lucide-react"; // Added icons
 import Image from 'next/image'; // Import next/image
+import { cn } from "@/lib/utils";
 
-interface ProductDetails {
+interface StoredProductDetails {
   productName: string;
-  pricePaid: string; // Total price paid for original quantity
-  quantity: string; // Current quantity (might be 0 if fully sold)
-  originalQuantityPurchased: string; // Original quantity bought
-  costPrice?: string; // Optional cost per unit
+  pricePaid: string; // Total price for original quantity
+  quantity: string; // Current stock or final quantity in archive
+  originalQuantityPurchased: string;
+  costPrice?: string; // Unit cost
   productImage?: string;
 }
 
+
 export default function ArchivedInventory() {
-  const [archivedProductDetails, setArchivedProductDetails] = useState<ProductDetails[]>([]);
+  const [archivedProductDetails, setArchivedProductDetails] = useState<StoredProductDetails[]>([]);
   const router = useRouter();
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openRemoveDialog, setOpenRemoveDialog] = useState<number | null>(null); // Store index to remove
@@ -41,22 +43,32 @@ export default function ArchivedInventory() {
   const [editCostPrice, setEditCostPrice] = useState("");
   const {toast} = useToast();
 
+  // Function to safely parse JSON from local storage
+  const safelyParseJSON = (key: string): StoredProductDetails[] => {
+      const storedValue = localStorage.getItem(key);
+      if (storedValue) {
+          try {
+              const parsed = JSON.parse(storedValue);
+              // Ensure it's an array before returning
+              if (Array.isArray(parsed)) {
+                  // TODO: Add deeper validation of array items if needed
+                  return parsed;
+              }
+              console.warn(`Data for key "${key}" is not an array, clearing.`);
+          } catch (e) {
+              console.error(`Error parsing JSON from localStorage key "${key}":`, e);
+          }
+          // Clear invalid data
+          localStorage.removeItem(key);
+      }
+      return []; // Return empty array if not found or invalid
+  };
+
+
   useEffect(() => {
     // Retrieve product details from local storage
-    const storedDetails = localStorage.getItem("purchasedProducts");
-    if (storedDetails) {
-       try {
-           const parsedDetails = JSON.parse(storedDetails);
-           if (Array.isArray(parsedDetails)) {
-               setArchivedProductDetails(parsedDetails);
-           } else {
-                localStorage.removeItem("purchasedProducts"); // Clear invalid data
-           }
-       } catch (e) {
-            console.error("Failed to parse purchased products from localStorage:", e);
-           localStorage.removeItem("purchasedProducts"); // Clear invalid data
-       }
-    }
+    const storedDetails = safelyParseJSON("purchasedProducts");
+    setArchivedProductDetails(storedDetails);
   }, []);
 
   const handleGoBack = () => {
@@ -110,20 +122,29 @@ export default function ArchivedInventory() {
 
     const handleRemoveProduct = (index: number) => {
         const productToRemove = archivedProductDetails[index];
-        const updatedProductDetails = archivedProductDetails.filter((_, i) => i !== index);
+        if (!productToRemove) return; // Should not happen if index is valid
 
-        localStorage.setItem("purchasedProducts", JSON.stringify(updatedProductDetails));
-        setArchivedProductDetails(updatedProductDetails);
+        // 1. Remove from Archived Inventory (purchasedProducts)
+        const updatedArchivedDetails = archivedProductDetails.filter((_, i) => i !== index);
+        localStorage.setItem("purchasedProducts", JSON.stringify(updatedArchivedDetails));
+        setArchivedProductDetails(updatedArchivedDetails); // Update state
+
+        // 2. Remove from Current Inventory (productDetails)
+        const currentInventory = safelyParseJSON("productDetails");
+        const updatedCurrentInventory = currentInventory.filter(p => p.productName !== productToRemove.productName); // Assuming productName is the unique identifier
+        localStorage.setItem("productDetails", JSON.stringify(updatedCurrentInventory));
+
+        // 3. Close dialog and show toast
         setOpenRemoveDialog(null); // Close confirmation dialog
         toast({
             title: "Product Permanently Removed!",
-            description: `${productToRemove.productName} has been removed from the archive.`,
+            description: `${productToRemove.productName} has been removed from the archive and current inventory.`,
             variant: "destructive" // Use destructive variant for permanent removal
         });
     };
 
   // Calculate unit price paid for display
-   const calculateUnitPricePaid = (product: ProductDetails): string => {
+   const calculateUnitPricePaid = (product: StoredProductDetails): string => {
      const price = parseFloat(product.pricePaid);
      const originalQty = parseInt(product.originalQuantityPurchased, 10);
      if (!isNaN(price) && !isNaN(originalQty) && originalQty > 0) {
@@ -146,7 +167,7 @@ export default function ArchivedInventory() {
       {archivedProductDetails && archivedProductDetails.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-6xl">
           {archivedProductDetails.map((product, index) => (
-            <Card key={index} className="w-full transition-transform transform hover:scale-105 hover:shadow-xl flex flex-col">
+            <Card key={index} className="w-full transition-transform transform hover:scale-105 hover:shadow-xl flex flex-col card">
               <CardHeader className="pb-2">
                  {/* Product Image */}
                  <div className="relative w-full h-48 mb-4 rounded-t-lg overflow-hidden">
@@ -155,7 +176,7 @@ export default function ArchivedInventory() {
                      alt={product.productName}
                      layout="fill"
                      objectFit="cover"
-                      data-ai-hint="archived product"
+                     data-ai-hint="archived product"
                    />
                  </div>
                 <CardTitle className="text-lg font-semibold truncate" title={product.productName}>{product.productName}</CardTitle>
@@ -164,7 +185,7 @@ export default function ArchivedInventory() {
               <CardContent className="grid gap-2 text-sm flex-grow">
                  <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Current Stock:</span>
-                  <span className={`font-semibold ${parseInt(product.quantity, 10) <= 0 ? 'text-destructive' : ''}`}>{product.quantity}</span>
+                  <span className={cn("font-semibold", parseInt(product.quantity, 10) <= 0 ? 'text-destructive' : '')}>{product.quantity}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Price Paid:</span>
@@ -293,7 +314,7 @@ export default function ArchivedInventory() {
            <DialogHeader>
              <DialogTitle>Confirm Permanent Removal</DialogTitle>
              <DialogDescription>
-               Are you sure you want to permanently remove <span className="font-bold">{archivedProductDetails[openRemoveDialog!]?.productName}</span> from the archive? This will affect historical reporting data. This action cannot be undone.
+               Are you sure you want to permanently remove <span className="font-bold">{archivedProductDetails[openRemoveDialog!]?.productName}</span> from the archive and current inventory? This will affect historical reporting data. This action cannot be undone.
              </DialogDescription>
            </DialogHeader>
            <DialogFooter>
