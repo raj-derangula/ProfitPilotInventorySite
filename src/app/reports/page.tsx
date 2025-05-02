@@ -129,16 +129,26 @@ export default function Reports() {
 
   // --- Calculation Logic ---
   const calculateTotals = (start: Date | null, end: Date | null) => {
-    let periodSpent = 0; // Cost of goods sold within the period
+    let periodSpentCostOfGoods = 0; // Cost of goods sold within the period
     let periodProfit = 0;
     let periodRevenue = 0;
 
     // Calculate Total Spending (All Time) - based on the archive
-    const allTimeSpent = allPurchasedProducts.reduce((acc: number, product: PurchasedProduct) => {
-        const pricePaid = parseFloat(product.pricePaid || "0");
-        return acc + (isNaN(pricePaid) ? 0 : pricePaid);
+    // This represents the total amount spent acquiring all products ever listed in the archive.
+    const allTimeTotalSpent = allPurchasedProducts.reduce((acc: number, product: PurchasedProduct) => {
+        // Use original quantity and derived unit cost for consistent calculation
+        const originalQty = parseInt(product.originalQuantityPurchased || "0", 10);
+        let unitCost = 0;
+        if (product.costPrice && !isNaN(parseFloat(product.costPrice))) {
+           unitCost = parseFloat(product.costPrice);
+        } else {
+            const totalPaid = parseFloat(product.pricePaid || "0");
+            unitCost = originalQty > 0 && !isNaN(totalPaid) ? totalPaid / originalQty : 0;
+        }
+         // Add the total cost for the original quantity of this product batch
+        return acc + (isNaN(unitCost * originalQty) ? 0 : unitCost * originalQty);
     }, 0);
-    setTotalSpent(allTimeSpent);
+    setTotalSpent(allTimeTotalSpent);
 
     // Determine the date range for filtering sales
     let effectiveStartDate = start ? new Date(start) : new Date(0); // Beginning of time if no start date
@@ -157,7 +167,7 @@ export default function Reports() {
      setFilteredSalesData(salesInRange); // Update the list of sales orders displayed
 
 
-    // Calculate Revenue, Profit, and Spending (Cost of Goods Sold) based on *sales within the selected date range*
+    // Calculate Revenue, Profit, and Cost of Goods Sold based on *sales within the selected date range*
     salesInRange.forEach((sale: SalesData) => {
         sale.productsSold.forEach(soldProduct => {
             const salePrice = parseFloat(soldProduct.salePrice || "0");
@@ -175,14 +185,16 @@ export default function Reports() {
             const unitCostPrice = getUnitCost(soldProduct.productName);
 
             const costForThisSaleItem = unitCostPrice * quantitySold;
-            periodSpent += costForThisSaleItem; // Add cost of this sold item to period spending
+            periodSpentCostOfGoods += costForThisSaleItem; // Add cost of this sold item to period COGS
             periodProfit += (saleRevenueForItem - costForThisSaleItem); // Calculate profit for this item
         });
     });
 
     setTotalRevenue(periodRevenue);
     setTotalProfit(periodProfit);
-    // Note: We set totalSpent (all-time) earlier. periodSpent is calculated but not displayed in a separate card.
+    // Note: totalSpent (all-time initial purchase cost) is set above.
+    // periodSpentCostOfGoods is calculated here based on sales in the period but isn't displayed in a separate card currently.
+    // The 'Total Spending' card shows ALL TIME SPENT, not just COGS for the period.
   };
 
     // --- Event Handlers ---
@@ -207,7 +219,7 @@ export default function Reports() {
         }
     };
 
-    // Placeholder for update logic - Complex inventory adjustment needed
+    // --- Update Sale ---
     const handleUpdateSale = () => {
         if (!selectedSale || !editDateOfSale) return;
 
@@ -218,24 +230,41 @@ export default function Reports() {
         // 4. Adjust `inventory` state/localStorage by adding back/removing the difference.
         // 5. Adjust `allPurchasedProducts` state/localStorage similarly if its quantity tracks current stock.
 
-        // For now, just update the sale data itself
+        // --- Basic Validation ---
+         for (const product of editProductsSold) {
+            if (!product.productName.trim()) {
+                 toast({
+                    title: "Invalid Input",
+                    description: `Product name cannot be empty for an item in the sale.`,
+                    variant: "destructive",
+                });
+                return;
+            }
+            if (isNaN(parseFloat(product.salePrice)) || parseFloat(product.salePrice) < 0) {
+                toast({
+                    title: "Invalid Input",
+                    description: `Please ensure sale price is a valid non-negative number for ${product.productName}.`,
+                    variant: "destructive",
+                });
+                return;
+            }
+             if (isNaN(parseInt(product.quantitySold)) || parseInt(product.quantitySold) <= 0) {
+                toast({
+                    title: "Invalid Input",
+                    description: `Please ensure quantity sold is a positive integer for ${product.productName}.`,
+                    variant: "destructive",
+                });
+                return; // Prevent update if validation fails
+            }
+        }
+
+        // --- Update Sale Data ---
         const updatedSalesData = salesData.map(sale => {
             if (sale.id === selectedSale.id) {
-                 // Validate edited product details
-                 for (const product of editProductsSold) {
-                    if (isNaN(parseFloat(product.salePrice)) || parseFloat(product.salePrice) < 0 || isNaN(parseInt(product.quantitySold)) || parseInt(product.quantitySold) <= 0) {
-                        toast({
-                            title: "Invalid Input",
-                            description: `Please ensure sale price and quantity are valid for ${product.productName}.`,
-                            variant: "destructive",
-                        });
-                        return; // Prevent update if validation fails
-                    }
-                }
                 return {
                     ...sale,
                     dateOfSale: editDateOfSale,
-                    productsSold: editProductsSold,
+                    productsSold: editProductsSold, // Use the edited list
                 };
             }
             return sale;
@@ -248,12 +277,14 @@ export default function Reports() {
         try {
             localStorage.setItem("sales", JSON.stringify(updatedSalesData));
             // TODO: Save updated inventory and purchasedProducts if adjusted
-            setSalesData(updatedSalesData);
+            setSalesData(updatedSalesData); // Update state
             setOpenEditDialog(false);
             setSelectedSale(null); // Clear selected sale
             toast({
-                title: "✅ Sale Updated (Basic)",
-                description: `Sale ID ${selectedSale.id} details saved. (Inventory not adjusted yet)`,
+                title: "⚠️ Sale Updated (Data Only)",
+                description: `Sale details saved. Remember to manually adjust inventory levels if quantities changed.`,
+                variant: "default", // Use default variant for warning
+                duration: 7000, // Show longer
             });
         } catch (error) {
              console.error("Error saving updated sale:", error);
@@ -432,7 +463,7 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalSpent.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Based on all archived purchases.</p>
+                <p className="text-xs text-muted-foreground">Total cost of all purchased products.</p>
             </CardContent>
             </Card>
 
@@ -561,7 +592,7 @@ export default function Reports() {
             <DialogContent className="sm:max-w-[600px]"> {/* Wider dialog */}
             <DialogHeader>
                 <DialogTitle>Edit Sale Order (ID: {selectedSale?.id})</DialogTitle>
-                <DialogDescription>Modify the details of this sale. Inventory adjustments are complex and not fully implemented in this edit.</DialogDescription>
+                <DialogDescription>Modify the details of this sale. Note: Inventory levels are NOT automatically adjusted when editing a sale.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-4"> {/* Scrollable content */}
                  {/* Date Picker */}
