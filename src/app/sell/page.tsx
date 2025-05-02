@@ -6,7 +6,7 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
-import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form, useFormField} from "@/components/ui/form";
+import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form"; // Removed useFormField
 import {z} from "zod";
 import {useForm, useFieldArray} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -16,12 +16,21 @@ import {Calendar} from "@/components/ui/calendar";
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {cn} from "@/lib/utils";
 import {format} from "date-fns";
-import {CalendarIcon} from "lucide-react";
+import {CalendarIcon, DollarSign, ShoppingCart, PlusCircle, Trash2, Package} from "lucide-react"; // Added icons
 
-interface ProductDetails {
+interface ProductDetails { // Represents an item in current inventory
+  productName: string;
+  pricePaid: string; // Total price for original quantity
+  quantity: string; // Current stock
+  originalQuantityPurchased: string;
+  costPrice?: string; // Unit cost
+  productImage?: string;
+}
+
+interface PurchasedProduct { // Represents an item in the purchase archive
   productName: string;
   pricePaid: string;
-  quantity: string;
+  quantity: string; // Final quantity (can be 0)
   originalQuantityPurchased: string;
   costPrice?: string;
   productImage?: string;
@@ -30,18 +39,18 @@ interface ProductDetails {
 const salesFormSchema = z.object({
   productsSold: z.array(
     z.object({
-      productName: z.string().min(2, {
-        message: "Product name must be at least 2 characters.",
+      productName: z.string().min(1, { // Changed min to 1, empty string is not allowed if selected
+        message: "Product must be selected.",
       }),
       salePrice: z.string().refine((value) => {
         try {
           const num = parseFloat(value);
-          return !isNaN(num) && num > 0;
+          return !isNaN(num) && num >= 0; // Allow 0 price
         } catch (e) {
           return false;
         }
       }, {
-        message: "Sale price must be a valid number greater than zero.",
+        message: "Sale price must be a valid number.",
       }),
       quantitySold: z.string().refine((value) => {
         try {
@@ -51,26 +60,29 @@ const salesFormSchema = z.object({
           return false;
         }
       }, {
-        message: "Quantity sold must be a valid integer greater than zero.",
+        message: "Quantity sold must be a positive integer.",
       }),
     })
-  ).min(1, {message: "At least one product must be selected"}),
-  dateOfSale: z.date(),
+  ).min(1, {message: "At least one product must be added to the sale."}),
+  dateOfSale: z.date({
+     required_error: "Date of sale is required.",
+  }),
 });
 
 type SalesFormValues = z.infer<typeof salesFormSchema>;
 
-export default function SalesPage() {
-  const [sales, setSales] = useState<any[]>([]);
+export default function SellPage() {
+  const [sales, setSales] = useState<any[]>([]); // Consider a stricter type later
   const {toast} = useToast();
   const router = useRouter();
-  const [inventory, setInventory] = useState<ProductDetails[]>([]);
-  const [purchasedProducts, setPurchasedProducts] = useState<ProductDetails[]>([]);
+  const [inventory, setInventory] = useState<ProductDetails[]>([]); // Available products to sell
+  const [purchasedProducts, setPurchasedProducts] = useState<PurchasedProduct[]>([]); // Archive for updates
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<SalesFormValues>({
     resolver: zodResolver(salesFormSchema),
     defaultValues: {
-      productsSold: [],
+      productsSold: [{ productName: "", salePrice: "", quantitySold: "" }], // Start with one empty item
       dateOfSale: new Date(),
     },
   });
@@ -81,109 +93,173 @@ export default function SalesPage() {
   });
 
   useEffect(() => {
-    // Load sales data from local storage on component mount
-    const storedSales = localStorage.getItem("sales");
-    if (storedSales) {
-      setSales(JSON.parse(storedSales));
-    }
+    // Load data from local storage safely
+    const loadData = (key: string, setter: Function, parser?: (data: any) => any) => {
+        const storedData = localStorage.getItem(key);
+        if (storedData) {
+            try {
+                let parsedData = JSON.parse(storedData);
+                 if (parser) {
+                   parsedData = parser(parsedData);
+                 }
+                // Basic check if it's an array before setting state
+                if (Array.isArray(parsedData)) {
+                    setter(parsedData);
+                } else {
+                     console.warn(`Data for key "${key}" is not an array, clearing.`);
+                     localStorage.removeItem(key);
+                }
+            } catch (e) {
+                console.error(`Failed to parse ${key} from localStorage:`, e);
+                localStorage.removeItem(key);
+            }
+        }
+    };
 
-    // Load inventory data from local storage
-    const storedInventory = localStorage.getItem("productDetails");
-    if (storedInventory) {
-      setInventory(JSON.parse(storedInventory));
-    }
+    // Parse sales with date conversion
+    const parseSales = (sales: any[]) => sales.map(sale => ({ ...sale, dateOfSale: new Date(sale.dateOfSale) }));
 
-    // Load purchased products from local storage
-    const storedPurchasedProducts = localStorage.getItem("purchasedProducts");
-    if (storedPurchasedProducts) {
-      setPurchasedProducts(JSON.parse(storedPurchasedProducts));
-    }
-  }, []);
+    loadData("sales", setSales, parseSales);
+    loadData("productDetails", setInventory); // Current inventory
+    loadData("purchasedProducts", setPurchasedProducts); // Archived/purchased list
 
-  useEffect(() => {
-    // Save sales data to local storage whenever it changes
-    localStorage.setItem("sales", JSON.stringify(sales));
-  }, [sales]);
+  }, []); // Load once on mount
 
-  const onSubmit = (values: SalesFormValues) => {
-    // First, validate that all quantities are valid based on inventory
+  // Note: Saving sales happens within onSubmit after validation
+
+    // Calculate unit price paid for display in dropdown
+   const calculateUnitPricePaid = (product: ProductDetails): string => {
+     const price = parseFloat(product.pricePaid);
+     const originalQty = parseInt(product.originalQuantityPurchased, 10);
+     if (!isNaN(price) && !isNaN(originalQty) && originalQty > 0) {
+       return (price / originalQty).toFixed(2);
+     }
+     return "N/A";
+   };
+
+   const onSubmit = (values: SalesFormValues) => {
+    setIsSubmitting(true); // Indicate submission start
+
+    // --- Validation Phase ---
+    let isValid = true;
+    const inventoryMap = new Map(inventory.map(p => [p.productName, parseInt(p.quantity, 10)]));
+
     for (const productSold of values.productsSold) {
-      const inventoryProduct = inventory.find(p => p.productName === productSold.productName);
-      if (!inventoryProduct) {
-        toast({
-          title: "Error recording sale!",
-          description: `Product ${productSold.productName} not found in inventory.`,
-          variant: "destructive",
-        });
-        return;
-      }
+        const availableQuantity = inventoryMap.get(productSold.productName);
 
-      const purchased = parseInt(inventoryProduct.quantity, 10);
-      const quantitySold = parseInt(productSold.quantitySold, 10);
+        if (availableQuantity === undefined) {
+            toast({
+                title: "Validation Error",
+                description: `Product "${productSold.productName}" not found in current inventory.`,
+                variant: "destructive",
+            });
+            isValid = false;
+            break; // Stop validation on first error
+        }
 
-      if (quantitySold > purchased) {
-        toast({
-          title: "Error recording sale!",
-          description: `Not enough ${productSold.productName} in inventory.`,
-          variant: "destructive",
-        });
-        return;
-      }
+        const quantityToSell = parseInt(productSold.quantitySold, 10);
+        if (isNaN(quantityToSell) || quantityToSell <= 0) {
+             toast({
+                title: "Validation Error",
+                description: `Invalid quantity entered for "${productSold.productName}".`,
+                variant: "destructive",
+            });
+            isValid = false;
+            break;
+        }
+
+        if (quantityToSell > availableQuantity) {
+            toast({
+                title: "Insufficient Stock",
+                description: `Not enough "${productSold.productName}" in inventory. Available: ${availableQuantity}, Trying to sell: ${quantityToSell}.`,
+                variant: "destructive",
+            });
+            isValid = false;
+            break;
+        }
     }
 
-    // If all quantities are valid, proceed to update inventory and record sale
+    if (!isValid) {
+        setIsSubmitting(false); // Stop submission if validation failed
+        return;
+    }
+
+    // --- Update Phase (if validation passed) ---
     let updatedInventory = [...inventory];
     let updatedPurchasedProducts = [...purchasedProducts];
 
+    // Update quantities
     for (const productSold of values.productsSold) {
-      updatedInventory = updatedInventory.map((product) => {
-        if (product.productName === productSold.productName) {
-          const purchased = parseInt(product.quantity, 10);
-          const quantitySold = parseInt(productSold.quantitySold, 10);
-          const remaining = purchased - quantitySold;
-          return {
-            ...product,
-            quantity: remaining.toString(),
-          };
-        }
-        return product;
-      });
+        const quantitySoldNum = parseInt(productSold.quantitySold, 10);
+
+        // Update current inventory (productDetails)
+        updatedInventory = updatedInventory.map((product) => {
+            if (product.productName === productSold.productName) {
+                const currentQty = parseInt(product.quantity, 10);
+                return {
+                    ...product,
+                    quantity: (currentQty - quantitySoldNum).toString(), // Decrease quantity
+                };
+            }
+            return product;
+        });
+
+        // Update archived inventory (purchasedProducts) - find the specific record if needed, or just update based on name
+        // This ensures the archive reflects the sale too.
+        updatedPurchasedProducts = updatedPurchasedProducts.map((product) => {
+             if (product.productName === productSold.productName) {
+                 const currentArchivedQty = parseInt(product.quantity, 10);
+                 // Only decrease if it makes sense in the archive context (e.g., tracking current state)
+                 // Or maybe the archive `quantity` shouldn't change post-purchase? Depends on its purpose.
+                 // Assuming archive `quantity` reflects current state:
+                 return {
+                    ...product,
+                     quantity: (currentArchivedQty - quantitySoldNum).toString()
+                 };
+             }
+             return product;
+         });
     }
 
-    // Filter out products with quantity equal to 0
+    // Filter out products with quantity 0 from current inventory
     updatedInventory = updatedInventory.filter(product => parseInt(product.quantity, 10) > 0);
 
-    // Save updated inventory to local storage
-    localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
-    setInventory(updatedInventory);
+    // --- Save Phase ---
+    try {
+        localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
+        localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts)); // Save updated archive
 
-        // Add the sold products to the purchasedProducts list, or update the quantity if it already exists
-        values.productsSold.forEach(soldProduct => {
-          const existingProductIndex = updatedPurchasedProducts.findIndex(p => p.productName === soldProduct.productName);
-          if (existingProductIndex !== -1) {
-              // Update quantity if the product already exists
-              updatedPurchasedProducts[existingProductIndex] = {
-                  ...updatedPurchasedProducts[existingProductIndex],
-                  quantity: (parseInt(updatedPurchasedProducts[existingProductIndex].quantity, 10) - parseInt(soldProduct.quantitySold, 10)).toString()
-              };
-          }
-      });
+        // Add the new sale to the list of sales and save
+        const newSalesData = [...sales, values];
+        localStorage.setItem("sales", JSON.stringify(newSalesData));
 
-    // Save updated inventory to local storage
-    localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
-    setInventory(updatedInventory);
-
-        localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
+        // Update state locally
+        setInventory(updatedInventory);
         setPurchasedProducts(updatedPurchasedProducts);
+        setSales(newSalesData);
 
-    // Add the new sale to the list of sales
-    setSales([...sales, values]);
-    toast({
-      title: "Sale recorded!",
-      description: `Sale of ${values.productsSold.length} products recorded on ${values.dateOfSale.toLocaleDateString()}`,
-    });
-    form.reset();
-  };
+        toast({
+            title: "✅ Sale Recorded!",
+            description: `Sale of ${values.productsSold.length} product type(s) recorded successfully.`,
+        });
+
+        form.reset({ // Reset form with defaults
+            productsSold: [{ productName: "", salePrice: "", quantitySold: "" }],
+            dateOfSale: new Date(),
+        });
+
+    } catch (error) {
+        console.error("Error saving sale data:", error);
+        toast({
+            title: "Storage Error",
+            description: "Failed to save sale data. Please try again.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsSubmitting(false); // Indicate submission end
+    }
+};
+
 
   const handleGoToInventory = () => {
     router.push("/inventory");
@@ -192,88 +268,120 @@ export default function SalesPage() {
   const today = new Date();
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10">
-      <h1 className="text-3xl font-bold mb-4">Record a Sale</h1>
-      <Card className="w-full max-w-4xl p-4">
-        <CardHeader>
-          <CardTitle>Sale Details</CardTitle>
-          <CardDescription>Record the details of your sale.</CardDescription>
+    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
+      <h1 className="page-title mb-8">Record a New Sale</h1>
+      <Card className="w-full max-w-4xl p-0 shadow-xl"> {/* Removed padding for full-width header/content */}
+        <CardHeader className="bg-muted/30 p-6 rounded-t-lg border-b">
+          <CardTitle className="flex items-center gap-2 text-xl font-semibold">
+            <ShoppingCart className="h-5 w-5 text-primary"/>
+            Sale Details
+          </CardTitle>
+          <CardDescription>Record the products sold and the date of the transaction.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {fields.map((product, index) => (
-                <div key={product.id} className="space-y-2 border p-4 rounded">
-                  <div className="flex justify-between">
-                    <h3 className="text-lg font-semibold">Product {index + 1}</h3>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => remove(index)}>
-                      Remove
-                    </Button>
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name={`productsSold.${index}.productName`}
-                    render={({field}) => (
-                      <FormItem>
-                        <FormLabel>Product Name</FormLabel>
-                        <FormControl>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select a product..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {inventory.map((product, inventoryIndex) => {
-                                const unitPrice = (parseFloat(product.pricePaid) / parseFloat(product.quantity)).toFixed(2);
-                                return parseInt(product.quantity, 10) > 0 ? (
-                                  <SelectItem key={inventoryIndex} value={product.productName}>
-                                    {`${product.productName} ($${unitPrice}) - Quantity: ${product.quantity}`}
-                                  </SelectItem>
-                                ) : null;
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        <FormDescription>Select the product sold.</FormDescription>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`productsSold.${index}.salePrice`}
-                    render={({field}) => (
-                      <FormItem>
-                        <FormLabel>Sale Price</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Sale Price" {...field} />
-                        </FormControl>
-                        <FormDescription>Enter the price you sold the product for.</FormDescription>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`productsSold.${index}.quantitySold`}
-                    render={({field}) => (
-                      <FormItem>
-                        <FormLabel>Quantity Sold</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Quantity Sold" {...field} />
-                        </FormControl>
-                        <FormDescription>Enter the quantity of the product sold.</FormDescription>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ))}
-              <Button type="button" onClick={() => append({productName: "", salePrice: "", quantitySold: ""})}>Add Product</Button>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+
+              {/* Products Sold Array */}
+              <div className="space-y-6">
+                 <Label className="text-base font-semibold">Products Sold</Label>
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex flex-col sm:flex-row items-start gap-4 border p-4 rounded-lg bg-background shadow-sm relative">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                          {/* Product Selection */}
+                          <FormField
+                            control={form.control}
+                            name={`productsSold.${index}.productName`}
+                            render={({field}) => (
+                              <FormItem className="md:col-span-1">
+                                <FormLabel>Product</FormLabel>
+                                <FormControl>
+                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <SelectTrigger className="w-full input">
+                                      <SelectValue placeholder="Select product..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {inventory.length === 0 && <SelectItem value="nodata" disabled>No products in inventory</SelectItem>}
+                                      {inventory.map((product) => (
+                                        <SelectItem key={product.productName} value={product.productName}>
+                                            {`${product.productName} (Stock: ${product.quantity})`}
+                                            <span className="text-xs text-muted-foreground ml-2">- Unit Paid: ${calculateUnitPricePaid(product)}</span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </FormControl>
+                                 <FormDescription className="text-xs">Item sold.</FormDescription>
+                              </FormItem>
+                            )}
+                          />
+
+                        {/* Quantity Sold */}
+                        <FormField
+                            control={form.control}
+                            name={`productsSold.${index}.quantitySold`}
+                            render={({field}) => (
+                            <FormItem className="md:col-span-1">
+                                <FormLabel>Quantity Sold</FormLabel>
+                                <FormControl>
+                                <Input type="number" placeholder="e.g., 1" {...field} className="input" min="1"/>
+                                </FormControl>
+                                <FormDescription className="text-xs">Number of units.</FormDescription>
+                            </FormItem>
+                            )}
+                        />
+
+                        {/* Sale Price (Per Unit) */}
+                        <FormField
+                          control={form.control}
+                          name={`productsSold.${index}.salePrice`}
+                          render={({field}) => (
+                            <FormItem className="md:col-span-1">
+                              <FormLabel>Sale Price (Unit)</FormLabel>
+                              <FormControl>
+                                 <div className="relative">
+                                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+                                     <Input type="number" placeholder="e.g., 29.99" {...field} className="input pl-8" step="0.01" min="0"/>
+                                 </div>
+                              </FormControl>
+                               <FormDescription className="text-xs">Price per single item.</FormDescription>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                       {/* Remove Button */}
+                       {fields.length > 1 && ( // Only show remove if more than one item
+                         <Button
+                            type="button"
+                            variant="ghost" // Changed to ghost for less emphasis
+                            size="icon"
+                            onClick={() => remove(index)}
+                            className="absolute top-2 right-2 sm:relative sm:top-auto sm:right-auto sm:self-center text-muted-foreground hover:text-destructive h-8 w-8" // Adjusted positioning and styling
+                            aria-label="Remove product from sale"
+                            >
+                            <Trash2 className="h-4 w-4" />
+                         </Button>
+                       )}
+                    </div>
+                  ))}
+                   <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => append({productName: "", salePrice: "", quantitySold: ""})}
+                    className="btn"
+                   >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Another Product
+                  </Button>
+              </div>
+
+              {/* Date of Sale */}
               <FormField
                 control={form.control}
                 name="dateOfSale"
                 render={({field}) => (
-                  <FormItem>
+                  <FormItem className="flex flex-col">
                     <FormLabel>Date of Sale</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
@@ -281,16 +389,12 @@ export default function SalesPage() {
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-[240px] pl-3 text-left font-normal",
+                              "w-[280px] justify-start text-left font-normal input", // Use input class for consistency
                               !field.value && "text-muted-foreground"
                             )}
                           >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
@@ -298,28 +402,40 @@ export default function SalesPage() {
                         <Calendar
                           mode="single"
                           selected={field.value}
-                          onSelect={(date) => {
-                            field.onChange(date);
-                          }}
-                          disabled={(date) =>
-                            date > today || date < new Date("2020-01-01")
-                          }
+                          onSelect={(date) => field.onChange(date)} // Simplified onSelect
+                          disabled={(date) => date > today || date < new Date("2000-01-01")} // Allow dates further back
                           initialFocus
                         />
                       </PopoverContent>
                     </Popover>
-                    <FormDescription>Enter the date the product was sold.</FormDescription>
+                    <FormDescription className="text-xs">When the sale occurred.</FormDescription>
                   </FormItem>
                 )}
               />
-              <Button type="submit">Record Sale</Button>
+
+              {/* Submit and Go Back Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                 <Button type="submit" className="flex-1 btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                        <>
+                           <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                           </svg>
+                           Recording Sale...
+                        </>
+                    ) : (
+                       "Record Sale"
+                    )}
+                 </Button>
+                 <Button type="button" variant="outline" className="flex-1 btn" onClick={handleGoToInventory}>
+                    <Package className="mr-2 h-4 w-4"/> Go To Inventory
+                 </Button>
+              </div>
             </form>
           </Form>
         </CardContent>
       </Card>
-      <Button className="mt-4" onClick={handleGoToInventory}>
-        Go To Inventory
-      </Button>
     </div>
   );
 }
