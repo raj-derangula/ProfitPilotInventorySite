@@ -1,7 +1,8 @@
+@import 'react-image-crop/dist/ReactCrop.css'; /* Moved this import to the top */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import 'react-image-crop/dist/ReactCrop.css';
+
 
 /*body {
   font-family: Arial, Helvetica, sans-serif;
@@ -233,16 +234,21 @@ label {
 
 /* Crop styles */
 .ReactCrop__crop-selection {
-  border: 2px dashed var(--color-primary);
+  border: 2px dashed hsl(var(--primary)); /* Use primary color for border */
 }
 
 .ReactCrop__drag-handle {
   border: 1px solid #eee;
   width: 8px;
   height: 8px;
+  background-color: rgba(0, 0, 0, 0.5); /* Make handles darker */
 }
 
 .ReactCrop__drag-handle::after {
   width: 8px;
   height: 8px;
+}
+
+.ReactCrop--overlay {
+  background-color: rgba(0, 0, 0, 0.6); /* Slightly darker overlay */
 }
