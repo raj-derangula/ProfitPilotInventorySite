@@ -81,7 +81,8 @@ interface ProductDetailsFormValues extends z.infer<typeof productDetailsSchema> 
 
 // Separate interface for pending products state to handle edits
 interface PendingProduct extends ProductDetailsFormValues {
-    screenshotDataUri?: string; // Keep the original screenshot for reference if needed
+    screenshotDataUri?: string; // Keep the original full screenshot for reference
+    // productImage field from ProductDetailsFormValues will hold the current image (original screenshot or user-uploaded)
 }
 
 export default function Home() {
@@ -132,30 +133,79 @@ export default function Home() {
         const existingProducts = safelyParseJSON("productDetails");
         const existingPurchasedProducts = safelyParseJSON("purchasedProducts");
 
-        // Use placeholder image ONLY if productData.productImage is empty
+        // Use explicitly provided image first, otherwise generate placeholder
         const imageToUse = productData.productImage || `https://picsum.photos/seed/${encodeURIComponent(productData.productName)}/400/300`;
 
         const newProduct: StoredProductDetails = {
-            ...productData,
-            productImage: imageToUse, // Use uploaded image or placeholder
-            originalQuantityPurchased: productData.quantity, // Set original quantity on add
-            quantity: String(productData.quantity), // Set current quantity
+            productName: productData.productName,
             pricePaid: String(productData.pricePaid),
+            quantity: String(productData.quantity), // Set current quantity
+            originalQuantityPurchased: productData.originalQuantityPurchased, // Use the passed original quantity
             costPrice: productData.costPrice ? String(productData.costPrice) : undefined,
+            productImage: imageToUse, // Use the determined image
         };
 
-        const updatedProducts = [...existingProducts, newProduct];
-        const updatedPurchasedProducts = [...existingPurchasedProducts, newProduct];
 
-        // Filter out 0 quantity items AFTER adding (though new ones won't be 0)
+        // Check if product already exists in 'purchasedProducts' (archive)
+        const existingArchiveIndex = existingPurchasedProducts.findIndex(p => p.productName === newProduct.productName);
+
+        let updatedPurchasedProducts;
+        if (existingArchiveIndex > -1) {
+            // Update existing entry in archive
+            updatedPurchasedProducts = [...existingPurchasedProducts];
+            const existingArchived = updatedPurchasedProducts[existingArchiveIndex];
+            const oldTotalPaid = parseFloat(existingArchived.pricePaid) || 0;
+            const oldOriginalQty = parseInt(existingArchived.originalQuantityPurchased, 10) || 0;
+            const oldCurrentQty = parseInt(existingArchived.quantity, 10) || 0;
+
+            const newTotalPaid = parseFloat(newProduct.pricePaid) || 0;
+            const newOriginalQty = parseInt(newProduct.originalQuantityPurchased, 10) || 0;
+
+            existingArchived.pricePaid = (oldTotalPaid + newTotalPaid).toFixed(2); // Add total prices
+            existingArchived.originalQuantityPurchased = (oldOriginalQty + newOriginalQty).toString(); // Add original quantities
+            existingArchived.quantity = (oldCurrentQty + newOriginalQty).toString(); // Add to current quantity in archive
+            // Keep existing costPrice or update if new one provided? - Let's keep existing for simplicity
+            existingArchived.productImage = newProduct.productImage; // Update image if needed
+        } else {
+            // Add as new entry to archive
+            updatedPurchasedProducts = [...existingPurchasedProducts, newProduct];
+        }
+
+         // Check if product already exists in 'productDetails' (current inventory)
+         const existingInventoryIndex = existingProducts.findIndex(p => p.productName === newProduct.productName);
+         let updatedProducts;
+         if(existingInventoryIndex > -1) {
+            // Update existing entry in inventory
+             updatedProducts = [...existingProducts];
+             const existingInv = updatedProducts[existingInventoryIndex];
+             const oldInvQty = parseInt(existingInv.quantity, 10) || 0;
+             const newInvQty = parseInt(newProduct.quantity, 10) || 0;
+             const oldInvOriginalQty = parseInt(existingInv.originalQuantityPurchased, 10) || 0;
+             const newInvOriginalQty = parseInt(newProduct.originalQuantityPurchased, 10) || 0;
+             const oldInvTotalPaid = parseFloat(existingInv.pricePaid) || 0;
+             const newInvTotalPaid = parseFloat(newProduct.pricePaid) || 0;
+
+             existingInv.quantity = (oldInvQty + newInvQty).toString();
+             // Update original qty and price paid to reflect the *combined* purchase for unit price calculation later
+             existingInv.originalQuantityPurchased = (oldInvOriginalQty + newInvOriginalQty).toString();
+             existingInv.pricePaid = (oldInvTotalPaid + newInvTotalPaid).toFixed(2);
+             // Keep existing costPrice or update if new one provided? - Let's keep existing
+             existingInv.productImage = newProduct.productImage; // Update image
+         } else {
+            // Add as new entry to inventory
+             updatedProducts = [...existingProducts, newProduct];
+         }
+
+
+        // Filter out 0 quantity items AFTER adding/updating
         const filteredProducts = updatedProducts.filter(product => parseInt(product.quantity, 10) > 0);
 
         localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
         localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
 
         toast({
-            title: "✅ Product Added!",
-            description: `${productData.productName} (${productData.quantity}) added to inventory.`,
+            title: "✅ Product Added/Updated!",
+            description: `${productData.productName} (${productData.quantity}) added/updated in inventory.`,
         });
     };
 
@@ -190,15 +240,15 @@ export default function Home() {
         const productDetails = await extractProductDetails({ screenshotDataUri: dataUri });
         const quantity = Math.max(1, productDetails.quantityPurchased);
 
-        // Don't set productImage here, let user upload specific one later if needed
+        // Use the full screenshot data URI as the initial productImage
         const productData: PendingProduct = {
             productName: productDetails.productName,
             pricePaid: productDetails.pricePaid.toString(),
             quantity: quantity.toString(),
             originalQuantityPurchased: quantity.toString(), // Set original quantity from AI
             costPrice: "", // Default cost price
-            productImage: "", // Leave empty initially
-            screenshotDataUri: dataUri, // Keep screenshot for reference
+            productImage: dataUri, // Use screenshot as initial image
+            screenshotDataUri: dataUri, // Keep original screenshot for reference
         };
 
         // Check if approval is required
@@ -206,7 +256,15 @@ export default function Home() {
             newlyPendingProducts.push(productData); // Add to temporary list for this batch
             pendingCount++;
         } else {
-            addProductToInventory(productData); // Add directly (will use placeholder image if none provided)
+            // Directly add to inventory, passing necessary fields
+             addProductToInventory({
+                 productName: productData.productName,
+                 pricePaid: productData.pricePaid,
+                 quantity: productData.quantity,
+                 originalQuantityPurchased: productData.originalQuantityPurchased, // Pass original qty
+                 costPrice: productData.costPrice,
+                 productImage: productData.productImage, // Pass the screenshot image
+             });
             successCount++;
         }
 
@@ -234,7 +292,7 @@ export default function Home() {
 
      // Updated summary toast
      let description = "";
-     if (successCount > 0) description += `${successCount} product(s) added directly. `;
+     if (successCount > 0) description += `${successCount} product(s) added/updated directly. `;
      if (pendingCount > 0) description += `${pendingCount} product(s) pending approval. `;
      if (errorCount > 0) description += `${errorCount} failed.`;
 
@@ -257,7 +315,7 @@ export default function Home() {
          // Added some directly, but others are pending, don't redirect
          toast({
             title: "Products Added & Pending",
-            description: "Some products added, others require review below.",
+            description: "Some products added/updated, others require review below.",
          });
       }
   };
@@ -296,12 +354,14 @@ export default function Home() {
   };
 
  const onSubmit = (values: ProductDetailsFormValues) => {
-    // Manual submission doesn't have a specific image unless we add an input
-    // For now, it will use the placeholder in addProductToInventory
+    // Manual submission doesn't have a specific image unless we add an input later
+    // For now, it will use the placeholder in addProductToInventory if productImage is empty
     const dataToAdd = {
         ...values,
-        originalQuantityPurchased: values.quantity, // Set original quantity on manual add
-        productImage: values.productImage || "", // Keep explicitly uploaded image or empty string
+        // For manual add, original quantity IS the quantity entered initially
+        originalQuantityPurchased: values.quantity,
+        // Pass productImage value (could be empty string, handled by addProductToInventory)
+        productImage: values.productImage || "",
     };
     addProductToInventory(dataToAdd);
 
@@ -314,7 +374,7 @@ export default function Home() {
         router.push("/inventory");
     } else {
          toast({
-            title: "Manual Product Added",
+            title: "Manual Product Added/Updated",
             description: "There are still products pending approval from screenshot uploads.",
          });
     }
@@ -347,7 +407,7 @@ export default function Home() {
             if (updated[index]) {
                 // @ts-ignore - Ignore type checking for dynamic field update
                 updated[index][field] = value;
-                 // Update originalQuantityPurchased if quantity changes
+                 // If quantity changes, update originalQuantityPurchased to match for pending items
                  if (field === 'quantity') {
                     updated[index].originalQuantityPurchased = value;
                  }
@@ -379,7 +439,7 @@ export default function Home() {
                 reader.readAsDataURL(file);
             });
 
-            // Update the specific pending product's image
+            // Update the specific pending product's productImage
             setPendingProducts(prev => {
                 const updated = [...prev];
                 if (updated[pendingProductImageIndex]) {
@@ -390,7 +450,7 @@ export default function Home() {
 
             toast({
                 title: "Image Updated",
-                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} updated.`,
+                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} updated. Click Approve to save.`,
             });
 
         } catch (error) {
@@ -427,13 +487,18 @@ export default function Home() {
              return;
         }
 
-        // Ensure original quantity matches current quantity on approval
-        const dataToInventory = {
-            ...productToApprove,
-            originalQuantityPurchased: productToApprove.quantity,
+        // Ensure original quantity matches current quantity on approval if not edited separately
+        // The productToApprove already holds the potentially edited values
+        const dataToInventory: ProductDetailsFormValues = {
+            productName: productToApprove.productName,
+            pricePaid: productToApprove.pricePaid,
+            quantity: productToApprove.quantity,
+            originalQuantityPurchased: productToApprove.originalQuantityPurchased, // Use the value from pending state
+            costPrice: productToApprove.costPrice,
+            productImage: productToApprove.productImage, // Pass the final image (screenshot or uploaded)
         };
 
-        addProductToInventory(dataToInventory); // Add the (potentially edited) product
+        addProductToInventory(dataToInventory); // Add/Update the product
 
         // Remove from pending list
         setPendingProducts(prev => prev.filter((_, i) => i !== index));
@@ -463,7 +528,7 @@ export default function Home() {
        {/* Upload and Manual Entry Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
          {/* Screenshot Upload Card */}
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 card"> {/* Added card class */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <Upload className="h-5 w-5 text-primary" />
@@ -494,7 +559,7 @@ export default function Home() {
                   <Button
                     variant="destructive"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-8 w-8 btn" // Added btn class
                     onClick={() => handleRemoveScreenshotPreview()}
                     aria-label="Remove Screenshot Preview"
                     disabled={isProcessingUploads}
@@ -504,7 +569,7 @@ export default function Home() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-8 w-8 btn" // Added btn class
                     onClick={handleChangeScreenshot}
                     aria-label="Change Screenshot(s)"
                      disabled={isProcessingUploads}
@@ -557,7 +622,7 @@ export default function Home() {
         </Card>
 
         {/* Product Details Form Card (Manual Entry) */}
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 card"> {/* Added card class */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <ImageIcon className="h-5 w-5 text-primary"/>
@@ -636,12 +701,15 @@ export default function Home() {
                     />
                 </div>
 
-                {/* Hidden fields remain the same */}
-                <FormField control={form.control} name="originalQuantityPurchased" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" value={form.getValues("quantity")} {...field} /></FormControl></FormItem> )}/>
+                 {/* Hidden field for productImage (can be populated manually if needed later) */}
                  <FormField control={form.control} name="productImage" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" {...field} /></FormControl></FormItem> )}/>
 
+                  {/* Hidden field derived from quantity for consistency, value set in onSubmit */}
+                 <FormField control={form.control} name="originalQuantityPurchased" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" value={form.getValues("quantity")} {...field} /></FormControl></FormItem> )}/>
+
+
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Button type="submit" className="flex-1 btn-primary" disabled={isProcessingUploads || isLoadingPrice}>
+                  <Button type="submit" className="flex-1 btn-primary btn" disabled={isProcessingUploads || isLoadingPrice}>
                     {isProcessingUploads ? 'Processing...' : 'Add Product Manually'}
                   </Button>
                   <Button type="button" variant="outline" className="flex-1 btn" onClick={calculateSuggestedPrice} disabled={isLoadingPrice || isProcessingUploads}>
@@ -667,7 +735,7 @@ export default function Home() {
 
        {/* Pending Products Review Section */}
         {pendingProducts.length > 0 && (
-            <Card className="w-full max-w-6xl shadow-lg">
+            <Card className="w-full max-w-6xl shadow-lg card"> {/* Added card class */}
                 <CardHeader>
                     <CardTitle>Review Pending Products ({pendingProducts.length})</CardTitle>
                     <CardDescription>Review, edit, and approve or discard products extracted from screenshots.</CardDescription>
@@ -685,10 +753,10 @@ export default function Home() {
                     {pendingProducts.map((product, index) => (
                         <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-all hover:shadow-md">
                             <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product">
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700 btn" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product">
                                      <CheckCircle className="h-5 w-5" />
                                  </Button>
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 hover:text-red-700" onClick={() => handleDiscardPendingProduct(index)} aria-label="Discard Product">
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 hover:text-red-700 btn" onClick={() => handleDiscardPendingProduct(index)} aria-label="Discard Product">
                                      <XCircle className="h-5 w-5" />
                                  </Button>
                             </div>
@@ -697,7 +765,7 @@ export default function Home() {
                                 <div className="relative w-full md:w-32 h-32 flex-shrink-0 group/image">
                                     {product.productImage ? (
                                         <Image
-                                            src={product.productImage}
+                                            src={product.productImage} // Display current image (screenshot or uploaded)
                                             alt={product.productName || 'Pending Product Image'}
                                             layout="fill"
                                             objectFit="cover"
@@ -713,7 +781,7 @@ export default function Home() {
                                      <Button
                                         variant="secondary"
                                         size="icon"
-                                        className="absolute bottom-1 right-1 h-7 w-7 opacity-0 group-hover/image:opacity-100 transition-opacity"
+                                        className="absolute bottom-1 right-1 h-7 w-7 opacity-0 group-hover/image:opacity-100 transition-opacity btn" // Added btn class
                                         onClick={() => handleEditPendingProductImage(index)}
                                         aria-label="Change product image"
                                     >
