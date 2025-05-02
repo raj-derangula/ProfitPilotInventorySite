@@ -1,6 +1,6 @@
 "use client";
 
-import {useState, useEffect} from "react";
+import {useState, useEffect, useRef} from "react"; // Added useRef
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -8,13 +8,24 @@ import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
 import {extractProductDetails} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import {Upload, X, Image as ImageIcon, DollarSign} from "lucide-react"; // Added ImageIcon, DollarSign
-import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form"; // Removed useFormField as it's auto-imported via useFormField hook
+import {Upload, X, Image as ImageIcon, DollarSign, Loader2} from "lucide-react"; // Added Loader2
+import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useRouter} from "next/navigation";
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image';
+import { cn } from "@/lib/utils"; // Import cn
+
+// Define the shape of the product data stored in localStorage
+interface StoredProductDetails {
+  productName: string;
+  pricePaid: string; // Total price for original quantity
+  quantity: string; // Current stock or final quantity in archive
+  originalQuantityPurchased: string;
+  costPrice?: string; // Unit cost
+  productImage?: string;
+}
 
 const productDetailsSchema = z.object({
   productName: z.string().min(2, {
@@ -41,6 +52,8 @@ const productDetailsSchema = z.object({
     message: "Quantity must be a valid integer greater than zero.",
   }),
   originalQuantityPurchased: z.string().refine((value) => {
+     // Original quantity should match the current quantity when adding initially
+     // This validation logic might be redundant if set programmatically
     try {
       const num = parseInt(value, 10);
       return !isNaN(num) && num > 0;
@@ -67,12 +80,13 @@ const productDetailsSchema = z.object({
 interface ProductDetailsFormValues extends z.infer<typeof productDetailsSchema> {}
 
 export default function Home() {
-  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null); // Preview for the *last* uploaded image
   const [suggestedSellingPrice, setSuggestedSellingPrice] = useState<number | null>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [isProcessingUploads, setIsProcessingUploads] = useState(false); // Loading state for multiple uploads
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const {toast} = useToast();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null); // Ref for file input
 
   const form = useForm<ProductDetailsFormValues>({
     resolver: zodResolver(productDetailsSchema),
@@ -80,73 +94,146 @@ export default function Home() {
       productName: "",
       pricePaid: "",
       quantity: "",
-      originalQuantityPurchased: "",
+      originalQuantityPurchased: "", // Will be set same as quantity initially
       costPrice: "",
       productImage: "",
     },
   });
 
-  useEffect(() => {
-    // Function to safely parse JSON from local storage
-    const safelyParseJSON = (key: string) => {
+   // Function to safely parse JSON from local storage
+    const safelyParseJSON = (key: string): StoredProductDetails[] => {
         const storedValue = localStorage.getItem(key);
         if (storedValue) {
             try {
-                return JSON.parse(storedValue);
+                const parsed = JSON.parse(storedValue);
+                // Ensure it's an array before returning
+                if (Array.isArray(parsed)) {
+                    // TODO: Add deeper validation of array items if needed
+                    return parsed;
+                }
+                console.warn(`Data for key "${key}" is not an array, clearing.`);
             } catch (e) {
                 console.error(`Error parsing JSON from localStorage key "${key}":`, e);
-                localStorage.removeItem(key); // Remove invalid data
             }
+            // Clear invalid data
+            localStorage.removeItem(key);
         }
-        return null; // Return null if not found or invalid
+        return []; // Return empty array if not found or invalid
     };
 
-    // Load product details from local storage on component mount
-    safelyParseJSON("productDetails");
-    safelyParseJSON("purchasedProducts");
-  }, []);
+    // Helper function to add a single product to inventory and archive
+    const addProductToInventory = (productData: ProductDetailsFormValues) => {
+        const existingProducts = safelyParseJSON("productDetails");
+        const existingPurchasedProducts = safelyParseJSON("purchasedProducts");
+
+        // Prepare the new product data, ensuring quantities are consistent
+        const newProduct: StoredProductDetails = {
+            ...productData,
+            productImage: productData.productImage || `https://picsum.photos/seed/${encodeURIComponent(productData.productName)}/400/300`,
+            originalQuantityPurchased: productData.quantity, // Set original quantity same as current quantity on initial add
+            // Ensure quantities are strings as per schema
+            quantity: String(productData.quantity),
+            pricePaid: String(productData.pricePaid),
+            costPrice: productData.costPrice ? String(productData.costPrice) : undefined,
+        };
+
+        // Add the new product to the lists
+        const updatedProducts = [...existingProducts, newProduct];
+        const updatedPurchasedProducts = [...existingPurchasedProducts, newProduct];
+
+        // Filter out products with quantity equal to 0 for the main inventory (though initial add should be > 0)
+        const filteredProducts = updatedProducts.filter(product => parseInt(product.quantity, 10) > 0);
+
+        // Store the updated lists in local storage
+        localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
+        localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts)); // Store all purchases
+
+        toast({
+            title: "✅ Product Added!",
+            description: `${productData.productName} (${productData.quantity}) added to inventory.`,
+        });
+    };
 
 
   const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
       return;
     }
 
-    setIsLoadingAI(true); // Start loading indicator for AI extraction
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const dataUri = reader.result as string;
-      setScreenshot(dataUri);
-      form.setValue("productImage", dataUri);
+    setIsProcessingUploads(true); // Start loading indicator
+    setScreenshotPreview(null); // Clear previous preview
 
+    let lastDataUri: string | null = null;
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const file of Array.from(files)) { // Iterate through all selected files
+      const reader = new FileReader();
       try {
-        const productDetails = await extractProductDetails({screenshotDataUri: dataUri});
-        form.setValue("productName", productDetails.productName);
-        form.setValue("pricePaid", productDetails.pricePaid.toString());
+          const dataUri = await new Promise<string>((resolve, reject) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+        lastDataUri = dataUri; // Store data URI for potential preview
+        setScreenshotPreview(dataUri); // Update preview for the current file being processed
+
+        const productDetails = await extractProductDetails({ screenshotDataUri: dataUri });
+
         // Ensure quantity is at least 1
         const quantity = Math.max(1, productDetails.quantityPurchased);
-        form.setValue("quantity", quantity.toString());
-        form.setValue("originalQuantityPurchased", quantity.toString());
 
-        toast({
-          title: "🤖 Product details extracted!",
-          description: `Product: ${productDetails.productName}, Price: $${productDetails.pricePaid}, Qty: ${quantity}`,
-        });
+        // Prepare data for adding to inventory
+        const productData: ProductDetailsFormValues = {
+            productName: productDetails.productName,
+            pricePaid: productDetails.pricePaid.toString(),
+            quantity: quantity.toString(),
+            originalQuantityPurchased: quantity.toString(), // Set original quantity
+            costPrice: "", // AI doesn't extract costPrice, leave empty or maybe calculate later
+            productImage: dataUri, // Use the actual screenshot
+        };
+
+        // Add the extracted product to inventory
+        addProductToInventory(productData);
+        successCount++;
+
       } catch (error: any) {
-        console.error("Error extracting product details:", error);
+        console.error(`Error processing file ${file.name}:`, error);
         toast({
           variant: "destructive",
-          title: "AI Extraction Error",
+          title: `AI Extraction Error (${file.name})`,
           description: error.message || "Failed to extract details from screenshot.",
         });
-         // Reset relevant fields on error
-         handleRemoveScreenshot(false); // Don't show toast on internal reset
-      } finally {
-        setIsLoadingAI(false); // Stop loading indicator
+        errorCount++;
       }
-    };
-    reader.readAsDataURL(file);
+    }
+
+    // Reset file input value to allow re-uploading the same file(s)
+     if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+     }
+
+    setIsProcessingUploads(false); // Stop loading indicator
+
+    // Final toast summarizing the batch upload
+     toast({
+        title: "Screenshot Processing Complete",
+        description: `${successCount} product(s) added successfully, ${errorCount} failed.`,
+        variant: errorCount > 0 && successCount === 0 ? "destructive" : "default",
+     });
+
+     // Optionally reset the form if needed, or keep for manual entry
+     // form.reset();
+     // setScreenshotPreview(null); // Clear preview after all processing is done
+     setSuggestedSellingPrice(null);
+
+      // Redirect only if at least one product was added successfully
+      if (successCount > 0) {
+         // Debounce redirect slightly to allow toasts to be seen
+         setTimeout(() => router.push("/inventory"), 1000);
+      }
   };
 
   const calculateSuggestedPrice = async () => {
@@ -183,86 +270,41 @@ export default function Home() {
     }
   };
 
+ // Handles manual form submission
  const onSubmit = (values: ProductDetailsFormValues) => {
-    // Retrieve existing product details safely
-    const getStoredProducts = (key: string): ProductDetailsFormValues[] => {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                // Basic validation: check if it's an array
-                if (Array.isArray(parsed)) {
-                    // Optional: Further validate each item shape if needed
-                    return parsed;
-                }
-            } catch (e) {
-                console.error(`Error parsing localStorage key "${key}":`, e);
-            }
-        }
-        // If not found, invalid, or not an array, return empty array
-        localStorage.removeItem(key); // Clean up invalid data
-        return [];
-    };
-
-    const existingProducts = getStoredProducts("productDetails");
-    const existingPurchasedProducts = getStoredProducts("purchasedProducts");
-
-    // Prepare the new product data
-    const newProductData = {
-        ...values,
-        productImage: screenshot || `https://picsum.photos/seed/${encodeURIComponent(values.productName)}/400/300`, // Use screenshot or fallback
-        // Ensure quantities are strings as per schema, though stored as numbers potentially
-        quantity: String(values.quantity),
-        originalQuantityPurchased: String(values.originalQuantityPurchased),
-        pricePaid: String(values.pricePaid),
-        costPrice: values.costPrice ? String(values.costPrice) : undefined,
-    };
-
-    // Add the new product to the lists
-    const updatedProducts = [...existingProducts, newProductData];
-    const updatedPurchasedProducts = [...existingPurchasedProducts, newProductData];
-
-    // Filter out products with quantity equal to 0 for the main inventory
-    const filteredProducts = updatedProducts.filter(product => parseInt(product.quantity, 10) > 0);
-
-    // Store the updated lists in local storage
-    localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
-    localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts)); // Store all purchases
-
-    toast({
-      title: "✅ Product Added!",
-      description: `${values.productName} (${values.quantity}) added to inventory.`,
-    });
+    // Set originalQuantityPurchased same as quantity for manual add
+    const dataToAdd = { ...values, originalQuantityPurchased: values.quantity };
+    addProductToInventory(dataToAdd);
 
     // Reset form and state *after* successful storage
     form.reset(); // Reset form to default values
-    setScreenshot(null);
+    setScreenshotPreview(null);
     setSuggestedSellingPrice(null);
 
     router.push("/inventory"); // Redirect to inventory page after submission
 };
 
 
-    const handleRemoveScreenshot = (showToast = true) => {
-        setScreenshot(null);
-        // Reset AI-derived fields and image
-        form.resetField("productName");
-        form.resetField("pricePaid");
-        form.resetField("quantity");
-        form.resetField("originalQuantityPurchased");
-        form.setValue("productImage", ""); // Explicitly clear image
+    const handleRemoveScreenshotPreview = (showToast = true) => {
+        setScreenshotPreview(null);
+        // Reset the file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+        // Optionally reset parts of the form if the preview was tied to auto-filled data
+         // form.resetField("productImage"); // May not be needed if productImage isn't explicitly set by preview
         if (showToast) {
             toast({
-                title: "Screenshot Removed",
-                description: "Product details cleared.",
+                title: "Screenshot Preview Removed",
+                description: "Ready for new upload or manual entry.",
             });
         }
     };
 
   const handleChangeScreenshot = () => {
-    const fileInput = document.getElementById("screenshot-upload") as HTMLInputElement;
-    if (fileInput) {
-      fileInput.click();
+    // Trigger click on the hidden file input
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -275,38 +317,37 @@ export default function Home() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <Upload className="h-5 w-5 text-primary" />
-              Upload Order Screenshot
+              Upload Order Screenshot(s)
             </CardTitle>
-            <CardDescription>Let AI extract product details automatically. (Optional)</CardDescription>
+            <CardDescription>Let AI extract product details. You can upload multiple files.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center p-6 min-h-[250px] relative">
-            {isLoadingAI && (
+            {isProcessingUploads && (
               <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-b-lg">
                 <div className="flex flex-col items-center">
-                  <svg className="animate-spin h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <p className="text-muted-foreground">Extracting details...</p>
+                   <Loader2 className="animate-spin h-8 w-8 text-primary mb-2" />
+                  <p className="text-muted-foreground">Processing uploads...</p>
                  </div>
               </div>
             )}
-            {screenshot ? (
+            {screenshotPreview ? (
               <div className="relative w-full aspect-video mb-4 group">
                 <Image
-                  src={screenshot}
-                  alt="Order Confirmation Screenshot"
+                  src={screenshotPreview}
+                  alt="Last Uploaded Screenshot Preview"
                   layout="fill"
                   objectFit="contain"
                   className="rounded-md"
+                  data-ai-hint="order screenshot"
                 />
                 <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <Button
                     variant="destructive"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => handleRemoveScreenshot()}
-                    aria-label="Remove Screenshot"
+                    onClick={() => handleRemoveScreenshotPreview()}
+                    aria-label="Remove Screenshot Preview"
+                    disabled={isProcessingUploads}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -315,7 +356,8 @@ export default function Home() {
                     size="icon"
                     className="h-8 w-8"
                     onClick={handleChangeScreenshot}
-                    aria-label="Change Screenshot"
+                    aria-label="Change Screenshot(s)"
+                     disabled={isProcessingUploads}
                   >
                     <Upload className="h-4 w-4" />
                   </Button>
@@ -324,11 +366,14 @@ export default function Home() {
             ) : (
               <Label
                 htmlFor="screenshot-upload"
-                className="cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center"
+                className={cn(
+                  "cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center",
+                   isProcessingUploads && "cursor-not-allowed opacity-50" // Style when loading
+                )}
               >
                 <Upload className="h-10 w-10 text-muted-foreground mb-3" />
                 <span className="text-sm font-medium text-foreground">Click or Drag to Upload</span>
-                <span className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF up to 10MB</span>
+                <span className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF up to 10MB (Multiple allowed)</span>
               </Label>
             )}
             <Input
@@ -337,23 +382,30 @@ export default function Home() {
               accept="image/png, image/jpeg, image/gif"
               className="hidden"
               onChange={handleScreenshotUpload}
-              disabled={isLoadingAI}
+              disabled={isProcessingUploads}
+              multiple // Allow multiple file selection
+              ref={fileInputRef} // Assign ref
             />
+             {screenshotPreview && !isProcessingUploads && (
+               <p className="text-xs text-muted-foreground mt-2 text-center">Showing preview of the last uploaded image. Add more or proceed to manual entry.</p>
+             )}
           </CardContent>
         </Card>
 
-        {/* Product Details Form Card */}
+        {/* Product Details Form Card (Manual Entry) */}
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <ImageIcon className="h-5 w-5 text-primary"/>
-              Product Details
+              Manual Product Entry
             </CardTitle>
-            <CardDescription>Enter or verify the product details below.</CardDescription>
+            <CardDescription>Enter product details manually if not using AI extraction.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Disable form while uploads are processing */}
+              <fieldset disabled={isProcessingUploads}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FormField
                     control={form.control}
@@ -365,6 +417,7 @@ export default function Home() {
                             <Input placeholder="e.g., T-Shirt, Coffee Mug" {...field} className="input"/>
                         </FormControl>
                         <FormDescription className="text-xs">The name of the item.</FormDescription>
+                        {form.formState.errors.productName && <p className="text-destructive text-xs mt-1">{form.formState.errors.productName.message}</p>}
                         </FormItem>
                     )}
                     />
@@ -378,6 +431,7 @@ export default function Home() {
                             <Input type="number" placeholder="e.g., 10" {...field} className="input" min="1"/>
                         </FormControl>
                          <FormDescription className="text-xs">How many units?</FormDescription>
+                          {form.formState.errors.quantity && <p className="text-destructive text-xs mt-1">{form.formState.errors.quantity.message}</p>}
                         </FormItem>
                     )}
                     />
@@ -396,6 +450,7 @@ export default function Home() {
                             </div>
                         </FormControl>
                         <FormDescription className="text-xs">Total cost for the quantity entered.</FormDescription>
+                         {form.formState.errors.pricePaid && <p className="text-destructive text-xs mt-1">{form.formState.errors.pricePaid.message}</p>}
                         </FormItem>
                     )}
                     />
@@ -412,6 +467,7 @@ export default function Home() {
                             </div>
                         </FormControl>
                         <FormDescription className="text-xs">Cost per single item (if different).</FormDescription>
+                         {form.formState.errors.costPrice && <p className="text-destructive text-xs mt-1">{form.formState.errors.costPrice.message}</p>}
                         </FormItem>
                     )}
                     />
@@ -423,24 +479,28 @@ export default function Home() {
                   name="originalQuantityPurchased"
                   render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" {...field} /></FormControl></FormItem> )}
                 />
-                 {/* Hidden Product Image Field - automatically set */}
+                 {/* Hidden Product Image Field - set manually or via screenshot */}
                  <FormField
                   control={form.control}
                   name="productImage"
-                  render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" {...field} /></FormControl></FormItem> )}
+                  render={({field}) => (
+                       <FormItem className="hidden">
+                         {/* Optionally add a visible input if manual image URL entry is desired */}
+                          {/* <FormLabel>Product Image URL</FormLabel> */}
+                         <FormControl><Input type="hidden" {...field} /></FormControl>
+                         {/* <FormDescription className="text-xs">URL of the product image.</FormDescription> */}
+                       </FormItem>
+                 )}
                  />
 
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Button type="submit" className="flex-1 btn-primary" disabled={isLoadingAI || isLoadingPrice}>
-                    Add Product to Inventory
+                  <Button type="submit" className="flex-1 btn-primary" disabled={isProcessingUploads || isLoadingPrice}>
+                    {isProcessingUploads ? 'Processing...' : 'Add Product Manually'}
                   </Button>
-                  <Button type="button" variant="outline" className="flex-1" onClick={calculateSuggestedPrice} disabled={isLoadingPrice || isLoadingAI}>
+                  <Button type="button" variant="outline" className="flex-1" onClick={calculateSuggestedPrice} disabled={isLoadingPrice || isProcessingUploads}>
                      {isLoadingPrice ? (
                          <>
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+                            <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
                             Calculating...
                          </>
                      ) : (
@@ -449,7 +509,8 @@ export default function Home() {
                   </Button>
                 </div>
               </form>
-            </Form>
+            </fieldset> {/* End fieldset */}
+          </Form>
 
             {suggestedSellingPrice !== null && (
               <div className="mt-6 p-4 bg-accent/50 border border-accent rounded-lg text-center">
