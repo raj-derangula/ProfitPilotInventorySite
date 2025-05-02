@@ -669,13 +669,13 @@ export default function Home() {
 
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4 space-y-8">
+    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4 space-y-10"> {/* Increased base spacing */}
       <h1 className="page-title">Add New Product</h1>
 
        {/* Upload and Manual Entry Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
          {/* Screenshot Upload Card */}
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 card"> {/* Added card class */}
+        <Card className="card transition-all duration-300 hover:shadow-xl"> {/* Use card class, add transition */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <Upload className="h-5 w-5 text-primary" />
@@ -685,28 +685,26 @@ export default function Home() {
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center p-6 min-h-[300px] relative">
             {isProcessingUploads && (
-              <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-b-lg">
-                <div className="flex flex-col items-center">
-                   <Loader2 className="animate-spin h-8 w-8 text-primary mb-2" />
-                  <p className="text-muted-foreground">Processing uploads...</p>
-                 </div>
+              <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 rounded-b-lg backdrop-blur-sm"> {/* Added backdrop blur */}
+                <Loader2 className="animate-spin h-8 w-8 text-primary mb-2" />
+                <p className="text-muted-foreground">Processing uploads...</p>
               </div>
             )}
             {screenshotPreview ? (
-              <div className="relative w-full aspect-video mb-4 group">
+              <div className="relative w-full aspect-video mb-4 group border rounded-md overflow-hidden shadow-inner"> {/* Added border and shadow */}
                 <Image
                   src={screenshotPreview}
                   alt="Last Uploaded Screenshot Preview"
                   layout="fill"
                   objectFit="contain"
-                  className="rounded-md"
+                  className="transition-transform duration-300 group-hover:scale-105"
                   data-ai-hint="order screenshot"
                 />
                 <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <Button
                     variant="destructive"
                     size="icon"
-                    className="h-8 w-8 btn" // Added btn class
+                    className="h-8 w-8 btn backdrop-blur-sm bg-destructive/80 hover:bg-destructive" // Added btn, blur, alpha bg
                     onClick={() => handleRemoveScreenshotPreview()}
                     aria-label="Remove Screenshot Preview"
                     disabled={isProcessingUploads}
@@ -716,7 +714,7 @@ export default function Home() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-8 w-8 btn" // Added btn class
+                    className="h-8 w-8 btn backdrop-blur-sm bg-secondary/80 hover:bg-secondary" // Added btn, blur, alpha bg
                     onClick={handleChangeScreenshot}
                     aria-label="Change Screenshot(s)"
                      disabled={isProcessingUploads}
@@ -729,7 +727,7 @@ export default function Home() {
               <Label
                 htmlFor="screenshot-upload"
                 className={cn(
-                  "cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center",
+                  "cursor-pointer border-2 border-dashed border-border hover:border-primary/80 transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center hover:bg-accent/50", // Added hover bg
                    isProcessingUploads && "cursor-not-allowed opacity-50"
                 )}
               >
@@ -753,14 +751,14 @@ export default function Home() {
              )}
 
              {/* Approval Checkbox */}
-              <div className="flex items-center space-x-2 mt-4 self-start">
+              <div className="flex items-center space-x-2 mt-6 self-start w-full"> {/* Increased margin */}
                 <Checkbox
                     id="require-approval"
                     checked={requireApproval}
                     onCheckedChange={(checked) => setRequireApproval(Boolean(checked))}
                     disabled={isProcessingUploads}
                 />
-                <Label htmlFor="require-approval" className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                <Label htmlFor="require-approval" className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-0"> {/* Removed margin bottom */}
                     Require approval before adding products
                 </Label>
              </div>
@@ -769,7 +767,7 @@ export default function Home() {
         </Card>
 
         {/* Product Details Form Card (Manual Entry) */}
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 card"> {/* Added card class */}
+        <Card className="card transition-all duration-300 hover:shadow-xl"> {/* Use card class */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <ImageIcon className="h-5 w-5 text-primary"/>
@@ -855,7 +853,7 @@ export default function Home() {
                  <FormField control={form.control} name="originalQuantityPurchased" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" value={form.getValues("quantity")} {...field} /></FormControl></FormItem> )}/>
 
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-border/50 mt-8"> {/* Added border-t and margin-top */}
                   <Button type="submit" className="flex-1 btn-primary btn" disabled={isProcessingUploads || isLoadingPrice}>
                     {isProcessingUploads ? 'Processing...' : 'Add Product Manually'}
                   </Button>
@@ -898,38 +896,38 @@ export default function Home() {
                         ref={pendingProductImageInputRef}
                     />
                     {pendingProducts.map((product, index) => (
-                        <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-all hover:shadow-md">
-                            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700 btn" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product">
+                        <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-shadow duration-200 hover:shadow-md bg-background"> {/* Added bg */}
+                            <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"> {/* Adjusted positioning and gap */}
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700 btn rounded-full" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product" title="Approve">
                                      <CheckCircle className="h-5 w-5" />
                                  </Button>
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 hover:text-red-700 btn" onClick={() => handleDiscardPendingProduct(index)} aria-label="Discard Product">
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 hover:text-red-700 btn rounded-full" onClick={() => handleDiscardPendingProduct(index)} aria-label="Discard Product" title="Discard">
                                      <XCircle className="h-5 w-5" />
                                  </Button>
                             </div>
                             <div className="flex flex-col md:flex-row gap-6"> {/* Increased gap */}
                                 {/* Product Image and Action Buttons */}
-                                <div className="relative w-full md:w-32 h-32 flex-shrink-0 group/image">
+                                <div className="relative w-full md:w-36 h-36 flex-shrink-0 group/image border rounded-md overflow-hidden"> {/* Adjusted size, added border */}
                                     {product.productImage ? (
                                         <Image
                                             src={product.productImage} // Display current image (original, replaced, or cropped)
                                             alt={product.productName || 'Pending Product Image'}
                                             layout="fill"
                                             objectFit="cover" // Use cover to fill the square
-                                            className="rounded-md border" // Added border
+                                            className="transition-transform duration-300 group-hover/image:scale-110" // Added zoom effect
                                             data-ai-hint="pending product item"
                                         />
                                     ) : (
-                                        <div className="w-full h-full rounded-md bg-muted border flex items-center justify-center text-muted-foreground">
+                                        <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
                                             <ImageIcon className="h-10 w-10" />
                                         </div>
                                     )}
                                     {/* Image Action Buttons */}
-                                     <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover/image:opacity-100 transition-opacity">
+                                     <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity duration-200">
                                          <Button
                                             variant="secondary"
                                             size="icon"
-                                            className="h-7 w-7 btn" // Added btn class
+                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background" // Style adjustments
                                             onClick={() => handleOpenCropDialog(index)} // Open crop dialog
                                             aria-label="Crop product image"
                                             title="Crop Image"
@@ -940,7 +938,7 @@ export default function Home() {
                                          <Button
                                             variant="secondary"
                                             size="icon"
-                                            className="h-7 w-7 btn" // Added btn class
+                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background" // Style adjustments
                                             onClick={() => handleReplacePendingProductImage(index)} // Replace image
                                             aria-label="Replace product image"
                                             title="Replace Image"
@@ -950,9 +948,9 @@ export default function Home() {
                                      </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-grow">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 flex-grow"> {/* Adjusted gap */}
                                     {/* Editable fields */}
-                                    <div>
+                                    <div className="sm:col-span-2 lg:col-span-3"> {/* Name spans more cols */}
                                         <Label htmlFor={`pending-name-${index}`}>Product Name</Label>
                                         <Input
                                             id={`pending-name-${index}`}
@@ -1015,7 +1013,7 @@ export default function Home() {
                Select the area for the product image. The original screenshot is used as the source.
              </DialogDescription>
            </DialogHeader>
-           <div className="py-4 max-h-[70vh] overflow-auto flex justify-center items-center">
+           <div className="py-4 max-h-[70vh] overflow-auto flex justify-center items-center bg-muted/20 rounded-md border"> {/* Added bg, border */}
              {cropDialogImageSrc && (
                <ReactCrop
                  crop={crop}
@@ -1023,22 +1021,23 @@ export default function Home() {
                  onComplete={c => setCompletedCrop(c)}
                  aspect={1} // Keep aspect ratio 1:1 for consistency
                  className="max-w-full max-h-full"
+                 // style={{ background: 'rgba(0,0,0,0.1)' }} // Add subtle background to crop area itself if needed via style prop
                >
                  <img
                    ref={imgRef}
                    alt="Crop preview"
                    src={cropDialogImageSrc}
-                   style={{ maxHeight: '65vh' }} // Limit image height in dialog
+                   style={{ maxHeight: '65vh', display: 'block' }} // Limit image height and ensure block display
                    onLoad={onImageLoad}
                  />
                </ReactCrop>
              )}
            </div>
            <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenCropDialog(false)}>
+             <Button variant="outline" onClick={() => setOpenCropDialog(false)} className="btn">
                Cancel
              </Button>
-             <Button onClick={handleApplyCrop} className="btn-primary">
+             <Button onClick={handleApplyCrop} className="btn-primary btn">
                Apply Crop
              </Button>
            </DialogFooter>

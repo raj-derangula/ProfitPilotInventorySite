@@ -46,9 +46,9 @@
 
     /* Enhanced styles */
     --border-radius: 0.75rem; /* Consistent larger radius */
-    --box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* Slightly enhanced shadow */
-    --box-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --transition-duration: 0.2s; /* Smooth transitions */
+    --box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05); /* Softer, more subtle shadow */
+    --box-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05); /* Softer large shadow */
+    --transition-duration: 0.25s; /* Slightly smoother transitions */
   }
 
   .dark {
@@ -84,18 +84,28 @@
     --sidebar-accent-foreground: 142 50% 88%; /* Match accent foreground */
     --sidebar-border: 240 4% 20%; /* Match border */
     --sidebar-ring: 142 70% 45%; /* Match ring */
+
+    --box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.15);
+    --box-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -4px rgba(0, 0, 0, 0.15);
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box; /* Ensure consistent box model */
+  }
+  html {
+      scroll-behavior: smooth; /* Add smooth scrolling */
   }
   body {
     @apply bg-background text-foreground;
     font-family: 'Roboto', sans-serif; /* Apply Roboto font */
     -webkit-font-smoothing: antialiased; /* Improve font rendering */
     -moz-osx-font-smoothing: grayscale;
+    /* Subtle background pattern */
+    /* background-image: linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px), linear-gradient(to right, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+    background-size: 20px 20px; */
   }
 }
 
@@ -141,21 +151,42 @@
               color var(--transition-duration) ease-in-out,
               transform var(--transition-duration) ease-in-out,
               box-shadow var(--transition-duration) ease-in-out;
-   /* Add hover effect */
-  @apply hover:scale-[1.03] hover:shadow-lg active:scale-100 active:shadow-sm;
+   /* Add subtle hover/active effects */
+  @apply hover:scale-[1.02] hover:shadow-md active:scale-[0.98] active:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
 }
+
+/* Specific button variant refinements */
+.btn-primary {
+    @apply hover:bg-primary/90;
+}
+.btn-secondary {
+    @apply hover:bg-secondary/80;
+}
+.btn-destructive {
+    @apply hover:bg-destructive/90;
+}
+.btn-outline {
+    @apply hover:bg-accent hover:text-accent-foreground;
+}
+.btn-ghost {
+    @apply hover:bg-accent hover:text-accent-foreground;
+}
+
 
 /* Card styling */
 .card {
   border-radius: var(--border-radius);
+  border: 1px solid hsl(var(--border)); /* Ensure border is always visible */
   box-shadow: var(--box-shadow);
   transition: background-color var(--transition-duration),
-              box-shadow var(--transition-duration);
+              box-shadow var(--transition-duration),
+              transform var(--transition-duration); /* Add transform transition */
   overflow: hidden; /* Ensure content respects border radius */
 }
 
 .card:hover {
     box-shadow: var(--box-shadow-lg);
+    /* transform: translateY(-2px); Slightly lift card on hover */
 }
 
 /* Input fields styling */
@@ -165,10 +196,11 @@
 .select-trigger /* Shadcn select trigger */
  {
   border-radius: var(--border-radius);
+  border: 1px solid hsl(var(--input)); /* Use input border color */
   transition: border-color var(--transition-duration),
               box-shadow var(--transition-duration);
-  /* Add focus effect */
-  @apply focus:border-primary focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  /* Refined focus effect */
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-primary;
 }
 
 /* Textarea specific */
@@ -187,7 +219,7 @@
 
 /* Add transition to links */
 a {
-  transition: color 0.2s ease-in-out;
+  transition: color var(--transition-duration) ease-in-out;
   /* Add hover effect */
   @apply hover:text-primary;
 }
@@ -199,18 +231,18 @@ a {
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: hsl(var(--background)); /* Match background */
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--secondary));
+  background: hsl(var(--border)); /* Use border color */
   border-radius: 10px;
-  border: 2px solid hsl(var(--muted));
+  border: 2px solid hsl(var(--background)); /* Create padding effect */
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--secondary-foreground));
+  background: hsl(var(--muted-foreground)); /* Darken on hover */
 }
 
 /* Main content area padding */
@@ -220,7 +252,7 @@ main {
 
 /* General page title styling */
 h1.page-title {
-  @apply text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-center sm:text-left;
+  @apply text-3xl sm:text-4xl font-bold mb-8 sm:mb-10 text-center sm:text-left text-foreground; /* Increased bottom margin */
 }
 
 /* Form enhancements */
@@ -229,26 +261,38 @@ form {
 }
 
 label {
-    @apply font-medium;
+    @apply font-medium text-sm text-foreground; /* Ensure label styling */
 }
 
-/* Crop styles */
+/* Crop styles - Make them more prominent */
 .ReactCrop__crop-selection {
   border: 2px dashed hsl(var(--primary)); /* Use primary color for border */
+  background-color: hsla(var(--primary) / 0.1); /* Subtle fill */
 }
 
 .ReactCrop__drag-handle {
-  border: 1px solid #eee;
-  width: 8px;
-  height: 8px;
-  background-color: rgba(0, 0, 0, 0.5); /* Make handles darker */
+  border: 1px solid rgba(255, 255, 255, 0.7); /* Lighter border */
+  width: 10px; /* Slightly larger handles */
+  height: 10px;
+  background-color: hsla(var(--primary) / 0.7); /* Use primary color, semi-transparent */
+  box-shadow: 0 0 0 2px hsla(var(--background) / 0.5); /* Add subtle background contrast */
 }
 
 .ReactCrop__drag-handle::after {
-  width: 8px;
-  height: 8px;
+  /* Remove default :after if not needed or style it */
+  display: none;
 }
 
 .ReactCrop--overlay {
-  background-color: rgba(0, 0, 0, 0.6); /* Slightly darker overlay */
+  background-color: rgba(0, 0, 0, 0.65); /* Slightly darker overlay */
+}
+
+/* Utility for subtle borders */
+.subtle-border {
+    @apply border border-border/60;
+}
+
+/* Improve focus states globally */
+*:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
 }

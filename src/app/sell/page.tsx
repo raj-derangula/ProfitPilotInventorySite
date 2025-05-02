@@ -16,7 +16,9 @@ import {Calendar} from "@/components/ui/calendar";
 import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
 import {cn} from "@/lib/utils";
 import {format} from "date-fns";
-import {CalendarIcon, DollarSign, ShoppingCart, PlusCircle, Trash2, Package} from "lucide-react"; // Added icons
+import {CalendarIcon, DollarSign, ShoppingCart, PlusCircle, Trash2, Package, Info} from "lucide-react"; // Added Info icon
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip components
+
 
 interface ProductDetails { // Represents an item in current inventory
   productName: string;
@@ -209,12 +211,11 @@ export default function SellPage() {
         updatedPurchasedProducts = updatedPurchasedProducts.map((product) => {
              if (product.productName === productSold.productName) {
                  const currentArchivedQty = parseInt(product.quantity, 10);
-                 // Only decrease if it makes sense in the archive context (e.g., tracking current state)
-                 // Or maybe the archive `quantity` shouldn't change post-purchase? Depends on its purpose.
-                 // Assuming archive `quantity` reflects current state:
+                 // Ensure quantity doesn't go below zero in archive (shouldn't happen if inventory check passed, but good practice)
+                 const newArchivedQty = Math.max(0, currentArchivedQty - quantitySoldNum);
                  return {
                     ...product,
-                     quantity: (currentArchivedQty - quantitySoldNum).toString()
+                     quantity: newArchivedQty.toString()
                  };
              }
              return product;
@@ -226,11 +227,14 @@ export default function SellPage() {
 
     // --- Save Phase ---
     try {
+        const saleId = `sale_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`; // Generate a more unique ID
+        const newSaleRecord = { ...values, id: saleId };
+
         localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
         localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts)); // Save updated archive
 
         // Add the new sale to the list of sales and save
-        const newSalesData = [...sales, values];
+        const newSalesData = [newSaleRecord, ...sales]; // Prepend new sale
         localStorage.setItem("sales", JSON.stringify(newSalesData));
 
         // Update state locally
@@ -268,9 +272,10 @@ export default function SellPage() {
   const today = new Date();
 
   return (
+    <TooltipProvider>
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
-      <h1 className="page-title mb-8">Record a New Sale</h1>
-      <Card className="w-full max-w-4xl p-0 shadow-xl"> {/* Removed padding for full-width header/content */}
+      <h1 className="page-title mb-10">Record a New Sale</h1> {/* Increased margin */}
+      <Card className="w-full max-w-4xl p-0 shadow-xl card"> {/* Use card class */}
         <CardHeader className="bg-muted/30 p-6 rounded-t-lg border-b">
           <CardTitle className="flex items-center gap-2 text-xl font-semibold">
             <ShoppingCart className="h-5 w-5 text-primary"/>
@@ -284,10 +289,10 @@ export default function SellPage() {
 
               {/* Products Sold Array */}
               <div className="space-y-6">
-                 <Label className="text-base font-semibold">Products Sold</Label>
+                 <Label className="text-base font-semibold block mb-2">Products Sold</Label> {/* Added block and margin */}
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex flex-col sm:flex-row items-start gap-4 border p-4 rounded-lg bg-background shadow-sm relative">
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                    <div key={field.id} className="flex flex-col sm:flex-row items-start gap-4 border p-4 rounded-lg bg-background shadow-sm relative group"> {/* Added group */}
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 w-full"> {/* Increased horizontal gap */}
                           {/* Product Selection */}
                           <FormField
                             control={form.control}
@@ -302,16 +307,27 @@ export default function SellPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       {inventory.length === 0 && <SelectItem value="nodata" disabled>No products in inventory</SelectItem>}
-                                      {inventory.map((product) => (
-                                        <SelectItem key={product.productName} value={product.productName}>
-                                            {`${product.productName} (Stock: ${product.quantity})`}
-                                            <span className="text-xs text-muted-foreground ml-2">- Unit Paid: ${calculateUnitPricePaid(product)}</span>
-                                        </SelectItem>
-                                      ))}
+                                      {inventory.map((product) => {
+                                          const unitPaid = calculateUnitPricePaid(product);
+                                          return (
+                                            <SelectItem key={product.productName} value={product.productName}>
+                                                <div className="flex justify-between w-full">
+                                                    <span>{product.productName}</span>
+                                                    <span className="text-xs text-muted-foreground ml-2">
+                                                        (Stock: {product.quantity}, Paid: ${unitPaid})
+                                                    </span>
+                                                </div>
+                                            </SelectItem>
+                                          );
+                                      })}
                                     </SelectContent>
                                   </Select>
                                 </FormControl>
-                                 <FormDescription className="text-xs">Item sold.</FormDescription>
+                                 <FormDescription className="text-xs flex items-center gap-1">
+                                     <Info className="h-3 w-3" />
+                                     Item sold (stock & unit cost shown).
+                                 </FormDescription>
+                                 {form.formState.errors.productsSold?.[index]?.productName && <p className="text-destructive text-xs mt-1">{form.formState.errors.productsSold[index]?.productName?.message}</p>}
                               </FormItem>
                             )}
                           />
@@ -327,6 +343,7 @@ export default function SellPage() {
                                 <Input type="number" placeholder="e.g., 1" {...field} className="input" min="1"/>
                                 </FormControl>
                                 <FormDescription className="text-xs">Number of units.</FormDescription>
+                                {form.formState.errors.productsSold?.[index]?.quantitySold && <p className="text-destructive text-xs mt-1">{form.formState.errors.productsSold[index]?.quantitySold?.message}</p>}
                             </FormItem>
                             )}
                         />
@@ -345,22 +362,30 @@ export default function SellPage() {
                                  </div>
                               </FormControl>
                                <FormDescription className="text-xs">Price per single item.</FormDescription>
+                               {form.formState.errors.productsSold?.[index]?.salePrice && <p className="text-destructive text-xs mt-1">{form.formState.errors.productsSold[index]?.salePrice?.message}</p>}
                             </FormItem>
                           )}
                         />
                       </div>
                        {/* Remove Button */}
                        {fields.length > 1 && ( // Only show remove if more than one item
-                         <Button
-                            type="button"
-                            variant="ghost" // Changed to ghost for less emphasis
-                            size="icon"
-                            onClick={() => remove(index)}
-                            className="absolute top-2 right-2 sm:relative sm:top-auto sm:right-auto sm:self-center text-muted-foreground hover:text-destructive h-8 w-8" // Adjusted positioning and styling
-                            aria-label="Remove product from sale"
-                            >
-                            <Trash2 className="h-4 w-4" />
-                         </Button>
+                         <Tooltip>
+                             <TooltipTrigger asChild>
+                                 <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => remove(index)}
+                                    className="absolute top-2 right-2 sm:relative sm:top-auto sm:right-auto sm:self-center text-muted-foreground hover:text-destructive h-8 w-8 opacity-50 group-hover:opacity-100 transition-opacity" // Adjusted opacity and added group-hover effect
+                                    aria-label="Remove product from sale"
+                                    >
+                                    <Trash2 className="h-4 w-4" />
+                                 </Button>
+                             </TooltipTrigger>
+                             <TooltipContent>
+                                 <p>Remove item</p>
+                             </TooltipContent>
+                         </Tooltip>
                        )}
                     </div>
                   ))}
@@ -369,7 +394,7 @@ export default function SellPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => append({productName: "", salePrice: "", quantitySold: ""})}
-                    className="btn"
+                    className="btn mt-4" // Added margin-top
                    >
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Add Another Product
@@ -389,7 +414,7 @@ export default function SellPage() {
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-[280px] justify-start text-left font-normal input", // Use input class for consistency
+                              "w-full sm:w-[280px] justify-start text-left font-normal input", // Use input class for consistency, adjust width
                               !field.value && "text-muted-foreground"
                             )}
                           >
@@ -409,16 +434,17 @@ export default function SellPage() {
                       </PopoverContent>
                     </Popover>
                     <FormDescription className="text-xs">When the sale occurred.</FormDescription>
+                    {form.formState.errors.dateOfSale && <p className="text-destructive text-xs mt-1">{form.formState.errors.dateOfSale.message}</p>}
                   </FormItem>
                 )}
               />
 
               {/* Submit and Go Back Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                 <Button type="submit" className="flex-1 btn-primary" disabled={isSubmitting}>
+              <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t mt-10"> {/* Added padding/margin top, border */}
+                 <Button type="submit" className="flex-1 btn-primary btn" disabled={isSubmitting}>
                     {isSubmitting ? (
                         <>
-                           <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-primary-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> {/* Adjusted color */}
                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                            </svg>
@@ -437,5 +463,6 @@ export default function SellPage() {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   );
 }

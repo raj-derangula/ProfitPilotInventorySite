@@ -112,32 +112,41 @@ export default function Reports() {
   const getUnitCost = (productName: string): number => {
         const purchasedProduct = allPurchasedProducts.find((p: PurchasedProduct) => p.productName === productName);
         if (purchasedProduct) {
+            // Prefer the stored unit cost price if available
+            if (purchasedProduct.costPrice && !isNaN(parseFloat(purchasedProduct.costPrice))) {
+                return parseFloat(purchasedProduct.costPrice);
+            }
+            // Otherwise, calculate from total price paid and original quantity
             const originalQty = parseInt(purchasedProduct.originalQuantityPurchased || "0", 10);
             const totalPaidPrice = parseFloat(purchasedProduct.pricePaid || "0");
-            const unitCost = purchasedProduct.costPrice ? parseFloat(purchasedProduct.costPrice) : (originalQty > 0 ? totalPaidPrice / originalQty : 0);
+            const unitCost = originalQty > 0 ? totalPaidPrice / originalQty : 0;
             return isNaN(unitCost) ? 0 : unitCost;
         }
+        console.warn(`Unit cost not found for product: ${productName}. Returning 0.`);
         return 0; // Return 0 if product not found in purchase history
     };
 
 
   // --- Calculation Logic ---
   const calculateTotals = (start: Date | null, end: Date | null) => {
-    let currentSpent = 0;
-    let currentProfit = 0;
-    let currentRevenue = 0;
+    let periodSpent = 0; // Cost of goods sold within the period
+    let periodProfit = 0;
+    let periodRevenue = 0;
+
+    // Calculate Total Spending (All Time) - based on the archive
+    const allTimeSpent = allPurchasedProducts.reduce((acc: number, product: PurchasedProduct) => {
+        const pricePaid = parseFloat(product.pricePaid || "0");
+        return acc + (isNaN(pricePaid) ? 0 : pricePaid);
+    }, 0);
+    setTotalSpent(allTimeSpent);
 
     // Determine the date range for filtering sales
     let effectiveStartDate = start ? new Date(start) : new Date(0); // Beginning of time if no start date
     let effectiveEndDate = end ? new Date(end) : new Date(); // Now if no end date
 
-    // Adjust dates for comparison
+    // Adjust dates for comparison (inclusive range)
     effectiveStartDate.setHours(0, 0, 0, 0);
-    if (end) {
-        effectiveEndDate.setHours(23, 59, 59, 999); // Include the whole end day
-    } else {
-        effectiveEndDate.setHours(23, 59, 59, 999); // Use today if no end date
-    }
+    effectiveEndDate.setHours(23, 59, 59, 999); // Include the whole end day
 
 
      // Filter sales within the date range
@@ -147,49 +156,38 @@ export default function Reports() {
      });
      setFilteredSalesData(salesInRange); // Update the list of sales orders displayed
 
-     // Calculate Total Spending based on *all* purchased products (archive)
-     // This represents the total investment recorded.
-     currentSpent = allPurchasedProducts.reduce((acc: number, product: PurchasedProduct) => {
-         const pricePaid = parseFloat(product.pricePaid || "0");
-         return acc + pricePaid;
-     }, 0);
-     setTotalSpent(currentSpent); // Display total historical spending
 
-    // Calculate Revenue and Profit based on *sales within the selected date range*
+    // Calculate Revenue, Profit, and Spending (Cost of Goods Sold) based on *sales within the selected date range*
     salesInRange.forEach((sale: SalesData) => {
         sale.productsSold.forEach(soldProduct => {
             const salePrice = parseFloat(soldProduct.salePrice || "0");
             const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
-            const saleRevenueForItem = salePrice * quantitySold;
-            currentRevenue += saleRevenueForItem;
 
-             // Use helper to get unit cost
+            if (isNaN(salePrice) || isNaN(quantitySold) || quantitySold <= 0) {
+                 console.warn(`Invalid sale data found for product ${soldProduct.productName} in sale ${sale.id}. Skipping.`);
+                 return; // Skip calculation for this item if data is invalid
+            }
+
+            const saleRevenueForItem = salePrice * quantitySold;
+            periodRevenue += saleRevenueForItem;
+
+            // Use helper to get unit cost
             const unitCostPrice = getUnitCost(soldProduct.productName);
 
-            if (unitCostPrice > 0) {
-                const costForThisSale = unitCostPrice * quantitySold;
-                currentProfit += (saleRevenueForItem - costForThisSale);
-            } else {
-                // If cost is 0 or product not found, revenue is the profit for this item
-                currentProfit += saleRevenueForItem;
-                console.warn(`Cost not found or zero for ${soldProduct.productName} in sale ${sale.id}. Profit calculation might be less accurate.`);
-            }
+            const costForThisSaleItem = unitCostPrice * quantitySold;
+            periodSpent += costForThisSaleItem; // Add cost of this sold item to period spending
+            periodProfit += (saleRevenueForItem - costForThisSaleItem); // Calculate profit for this item
         });
     });
 
-    setTotalRevenue(currentRevenue);
-    setTotalProfit(currentProfit);
+    setTotalRevenue(periodRevenue);
+    setTotalProfit(periodProfit);
+    // Note: We set totalSpent (all-time) earlier. periodSpent is calculated but not displayed in a separate card.
   };
 
     // --- Event Handlers ---
-    const handleDateChange = (setter: React.Dispatch<React.SetStateAction<Date | null>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.value) {
-            // Ensure the date is parsed correctly, considering timezone might shift the date
-            const [year, month, day] = e.target.value.split('-').map(Number);
-            setter(new Date(year, month - 1, day)); // Use Date constructor with year, month (0-indexed), day
-        } else {
-            setter(null); // Reset to null if input is cleared
-        }
+    const handleDateChange = (setter: React.Dispatch<React.SetStateAction<Date | null>>) => (date: Date | undefined) => {
+         setter(date || null); // Directly set the date or null
     };
 
     const clearDates = () => {
@@ -223,6 +221,17 @@ export default function Reports() {
         // For now, just update the sale data itself
         const updatedSalesData = salesData.map(sale => {
             if (sale.id === selectedSale.id) {
+                 // Validate edited product details
+                 for (const product of editProductsSold) {
+                    if (isNaN(parseFloat(product.salePrice)) || parseFloat(product.salePrice) < 0 || isNaN(parseInt(product.quantitySold)) || parseInt(product.quantitySold) <= 0) {
+                        toast({
+                            title: "Invalid Input",
+                            description: `Please ensure sale price and quantity are valid for ${product.productName}.`,
+                            variant: "destructive",
+                        });
+                        return; // Prevent update if validation fails
+                    }
+                }
                 return {
                     ...sale,
                     dateOfSale: editDateOfSale,
@@ -278,21 +287,32 @@ export default function Reports() {
                 // If not in current inventory (was sold out), try to find in archive to add it back
                 const archiveProduct = allPurchasedProducts.find(p => p.productName === soldProduct.productName);
                 if (archiveProduct) {
-                    updatedInventory.push({
-                        ...archiveProduct, // Use archive details
-                        quantity: qtySold.toString(), // Set quantity to what's being returned
-                    });
+                    // Create a new entry for current inventory based on archive details + returned quantity
+                     updatedInventory.push({
+                       productName: archiveProduct.productName,
+                       pricePaid: archiveProduct.pricePaid, // Use archive total price paid
+                       quantity: qtySold.toString(), // Set quantity to what's being returned
+                       originalQuantityPurchased: archiveProduct.originalQuantityPurchased, // Use archive original qty
+                       costPrice: archiveProduct.costPrice, // Use archive cost price
+                       productImage: archiveProduct.productImage, // Use archive image
+                     });
                 } else {
                      console.warn(`Cannot add back inventory for ${soldProduct.productName}: Original purchase details not found.`);
+                     // Optionally, create a new placeholder entry if needed, though less ideal without cost info
                 }
             }
 
-            // Add back to archived inventory quantity (if it tracks current stock)
+            // Also add back to archived inventory quantity
             const purchIndex = updatedPurchasedProducts.findIndex(p => p.productName === soldProduct.productName);
             if (purchIndex !== -1) {
                 const currentArchivedQty = parseInt(updatedPurchasedProducts[purchIndex].quantity, 10);
+                // Ensure quantity doesn't exceed original purchased quantity if necessary, though generally adding back is fine
                 updatedPurchasedProducts[purchIndex].quantity = (currentArchivedQty + qtySold).toString();
             }
+             // If not found in archive, this indicates a data inconsistency, log warning?
+             else {
+                 console.warn(`Product ${soldProduct.productName} from removed sale not found in archive for quantity adjustment.`);
+             }
         });
 
 
@@ -301,8 +321,8 @@ export default function Reports() {
 
         try {
              localStorage.setItem("sales", JSON.stringify(updatedSalesData));
-             localStorage.setItem("productDetails", JSON.stringify(updatedInventory));
-             localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
+             localStorage.setItem("productDetails", JSON.stringify(updatedInventory)); // Save updated current inventory
+             localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts)); // Save updated archive
 
              setSalesData(updatedSalesData);
              setInventory(updatedInventory);
@@ -328,10 +348,10 @@ export default function Reports() {
     // --- Render ---
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
-      <h1 className="page-title mb-6">Reports Dashboard</h1>
+      <h1 className="page-title mb-10">Reports Dashboard</h1>
 
        {/* Date Filter Section */}
-       <Card className="w-full max-w-4xl mb-8 shadow-md">
+       <Card className="w-full max-w-4xl mb-10 shadow-md card"> {/* Use card class */}
          <CardHeader>
            <CardTitle className="flex items-center gap-2 text-lg">
              <CalendarDays className="h-5 w-5 text-primary" />
@@ -339,26 +359,63 @@ export default function Reports() {
            </CardTitle>
          </CardHeader>
          <CardContent className="flex flex-col sm:flex-row items-center gap-4">
+              {/* Start Date Popover */}
              <div className="flex-1 w-full sm:w-auto">
-             <Label htmlFor="start-date" className="mb-1 block text-sm font-medium">Start Date</Label>
-             <Input
-                type="date"
-                id="start-date"
-                value={startDate ? format(startDate, 'yyyy-MM-dd') : ''} // Format for input
-                onChange={handleDateChange(setStartDate)}
-                className="input"
-             />
+                 <Label htmlFor="start-date-btn" className="mb-1 block text-sm font-medium">Start Date</Label>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="start-date-btn"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal input", // Use input class for style consistency
+                          !startDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={startDate ?? undefined}
+                        onSelect={handleDateChange(setStartDate)}
+                        disabled={(date) => (endDate && date > endDate) || date > today} // Disable future dates and dates after end date
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
              </div>
+             {/* End Date Popover */}
              <div className="flex-1 w-full sm:w-auto">
-             <Label htmlFor="end-date" className="mb-1 block text-sm font-medium">End Date</Label>
-             <Input
-                type="date"
-                id="end-date"
-                value={endDate ? format(endDate, 'yyyy-MM-dd') : ''} // Format for input
-                onChange={handleDateChange(setEndDate)}
-                className="input"
-             />
+                 <Label htmlFor="end-date-btn" className="mb-1 block text-sm font-medium">End Date</Label>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="end-date-btn"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal input", // Use input class
+                          !endDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={endDate ?? undefined}
+                        onSelect={handleDateChange(setEndDate)}
+                        disabled={(date) => (startDate && date < startDate) || date > today} // Disable future dates and dates before start date
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
              </div>
+             {/* Clear Button */}
               <Button onClick={clearDates} variant="outline" className="mt-4 sm:mt-6 btn">
                  <FilterX className="mr-2 h-4 w-4" /> Clear Dates
               </Button>
@@ -366,100 +423,105 @@ export default function Reports() {
        </Card>
 
         {/* Key Metrics Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-10"> {/* Increased bottom margin */}
             {/* Total Spending Card */}
-            <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Card className="card shadow-md hover:shadow-lg transition-shadow duration-200"> {/* Use card class */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Spending (All Time)</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalSpent.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Total amount spent on all purchased products.</p>
+                <p className="text-xs text-muted-foreground">Based on all archived purchases.</p>
             </CardContent>
             </Card>
 
             {/* Total Profit Card */}
-            <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Card className="card shadow-md hover:shadow-lg transition-shadow duration-200"> {/* Use card class */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Profit (Selected Period)</CardTitle>
-                 <TrendingUp className={`h-4 w-4 ${totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                <CardTitle className="text-sm font-medium">Total Profit (Period)</CardTitle>
+                 <div className={cn("h-4 w-4", totalProfit >= 0 ? 'text-green-500' : 'text-red-500')}>
+                    {totalProfit >= 0 ? <TrendingUp/> : <TrendingDown/>}
+                 </div>
             </CardHeader>
             <CardContent>
-                 <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>${totalProfit.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Profit from sales within the date range.</p>
+                 <div className={cn("text-2xl font-bold", totalProfit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                     {totalProfit < 0 ? '-' : ''}${Math.abs(totalProfit).toFixed(2)}
+                 </div>
+                <p className="text-xs text-muted-foreground">Revenue - Cost of Goods Sold in period.</p>
             </CardContent>
             </Card>
 
             {/* Total Revenue Card */}
-            <Card className="shadow-md hover:shadow-lg transition-shadow">
+            <Card className="card shadow-md hover:shadow-lg transition-shadow duration-200"> {/* Use card class */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue (Selected Period)</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Revenue (Period)</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Revenue from sales within the date range.</p>
+                <p className="text-xs text-muted-foreground">Total income from sales in period.</p>
             </CardContent>
             </Card>
         </div>
 
       {/* Sales Orders List Section */}
-      <div className="w-full max-w-4xl p-0"> {/* Removed padding to align with cards */}
-        <Card className="shadow-md">
+      <div className="w-full max-w-4xl p-0">
+        <Card className="card shadow-md"> {/* Use card class */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
                <ListOrdered className="h-5 w-5 text-primary"/>
-               Sales Orders
+               Sales Orders {startDate || endDate ? '(Filtered)' : '(All Time)'}
             </CardTitle>
-            <CardDescription>Sales orders within the selected time period (most recent first).</CardDescription>
+            <CardDescription>Sales within the selected period (most recent first).</CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[400px] w-full border rounded-md">
+            <ScrollArea className="h-[450px] w-full border rounded-md p-1"> {/* Added padding */}
               {filteredSalesData.length > 0 ? (
                 <ul className="divide-y divide-border">
                   {filteredSalesData.map((sale: SalesData) => {
                     let saleProfit = 0;
                     let saleRevenue = 0;
-                    let saleSpending = 0; // Cost of goods sold in this specific sale
+                    let saleCost = 0; // Cost of goods sold in this specific sale
 
                     sale.productsSold.forEach((soldProduct) => {
                         const salePrice = parseFloat(soldProduct.salePrice || "0");
                         const quantitySold = parseInt(soldProduct.quantitySold || "0", 10);
+
+                        if (isNaN(salePrice) || isNaN(quantitySold) || quantitySold <= 0) return; // Skip invalid
+
                         const itemRevenue = salePrice * quantitySold;
                         saleRevenue += itemRevenue;
 
                         const unitCostPrice = getUnitCost(soldProduct.productName);
 
-                        if (unitCostPrice >= 0) { // Check if cost is non-negative
-                            const itemCost = unitCostPrice * quantitySold;
-                            saleSpending += itemCost;
-                            saleProfit += (itemRevenue - itemCost);
-                        } else {
-                            saleProfit += itemRevenue; // If cost negative or not found, treat revenue as profit for item
-                        }
+                        const itemCost = unitCostPrice * quantitySold;
+                        saleCost += itemCost;
+                        saleProfit += (itemRevenue - itemCost);
                     });
 
                     return (
-                      <li key={sale.id} className="p-4 hover:bg-accent/50 transition-colors group">
-                        <div className="flex justify-between items-start mb-2">
+                      <li key={sale.id} className="p-4 hover:bg-accent/50 transition-colors group relative"> {/* Added relative */}
+                        <div className="flex justify-between items-start mb-3"> {/* Increased margin */}
                             <div>
                                 <p className="font-semibold text-base">
-                                Sale Date: {sale.dateOfSale.toLocaleDateString()}
+                                Sale Date: {format(sale.dateOfSale, "PPP")} {/* Formatted Date */}
                                 </p>
-                                <p className="text-xs text-muted-foreground">ID: {sale.id}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">ID: {sale.id}</p>
                             </div>
-                             <div className="text-right text-xs space-y-1 flex-shrink-0 ml-4">
+                             {/* Sale Summary */}
+                             <div className="text-right text-xs space-y-1 flex-shrink-0 ml-4 bg-muted/40 px-3 py-2 rounded-md border subtle-border">
                                 <div>Revenue: <span className="font-medium">${saleRevenue.toFixed(2)}</span></div>
-                                <div>Cost: <span className="font-medium">${saleSpending.toFixed(2)}</span></div>
-                                <div className={`font-semibold ${saleProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    Profit: ${saleProfit.toFixed(2)}
+                                <div>Cost: <span className="font-medium">${saleCost.toFixed(2)}</span></div>
+                                <div className={cn("font-semibold", saleProfit >= 0 ? 'text-green-600' : 'text-red-600')}>
+                                    Profit: {saleProfit < 0 ? '-' : ''}${Math.abs(saleProfit).toFixed(2)}
                                 </div>
                             </div>
                         </div>
-                        <div className="text-sm space-y-1">
-                           <p className="font-medium">Products Sold:</p>
-                            <ul className="list-disc list-inside pl-2 text-muted-foreground">
+                        {/* Products Sold Details */}
+                        <div className="text-sm space-y-1.5"> {/* Increased spacing */}
+                           <p className="font-medium text-foreground">Products Sold:</p>
+                            <ul className="list-disc list-inside pl-2 space-y-1 text-muted-foreground"> {/* Added spacing */}
                                 {sale.productsSold.map((soldProduct, i) => (
                                 <li key={i}>
                                     {soldProduct.productName} ({soldProduct.quantitySold} x ${parseFloat(soldProduct.salePrice).toFixed(2)})
@@ -467,13 +529,15 @@ export default function Reports() {
                                 ))}
                             </ul>
                         </div>
-                         {/* Edit/Remove Buttons */}
-                          <div className="mt-3 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                             <Button onClick={() => handleEditSale(sale.id)} variant="outline" size="sm" className="btn">
+                         {/* Edit/Remove Buttons - Appear on hover */}
+                          <div className="absolute top-3 right-3 flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                             <Button onClick={() => handleEditSale(sale.id)} variant="outline" size="icon" className="btn h-7 w-7">
                                 <Edit className="h-4 w-4" />
+                                <span className="sr-only">Edit Sale</span>
                              </Button>
-                             <Button onClick={() => setOpenRemoveDialog(sale.id)} variant="destructive" size="sm" className="btn">
+                             <Button onClick={() => setOpenRemoveDialog(sale.id)} variant="destructive" size="icon" className="btn h-7 w-7">
                                 <Trash2 className="h-4 w-4" />
+                                 <span className="sr-only">Remove Sale</span>
                              </Button>
                           </div>
                       </li>
@@ -534,7 +598,7 @@ export default function Reports() {
                     <div key={`edit-${index}`} className="grid grid-cols-4 items-start gap-4 border-b pb-4">
                          <Label className="text-right pt-2 col-span-1">Item {index + 1}</Label>
                          <div className="col-span-3 grid gap-2">
-                             {/* Product Name (Consider if this should be editable - might break links) */}
+                             {/* Product Name (Read-only) */}
                              <Input value={product.productName} readOnly className="input bg-muted" title="Product name cannot be changed here"/>
 
                              {/* Quantity Sold */}
@@ -581,8 +645,8 @@ export default function Reports() {
 
             </div>
             <DialogFooter>
-                <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)}>Cancel</Button>
-                <Button type="button" onClick={handleUpdateSale} className="btn-primary">Save Changes</Button>
+                <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn">Cancel</Button>
+                <Button type="button" onClick={handleUpdateSale} className="btn-primary btn">Save Changes</Button>
             </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -598,7 +662,7 @@ export default function Reports() {
              </DialogDescription>
            </DialogHeader>
            <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)}>
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn">
                Cancel
              </Button>
              <Button variant="destructive" onClick={() => handleRemoveSale(openRemoveDialog!)} className="btn">

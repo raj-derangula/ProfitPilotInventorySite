@@ -16,8 +16,9 @@ import {
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
-import {Edit, Trash2, PlusCircle, DollarSign} from "lucide-react"; // Added icons
+import {Edit, Trash2, PlusCircle, DollarSign, PackageSearch, Package} from "lucide-react"; // Added icons
 import Image from 'next/image'; // Import next/image
+import { cn } from "@/lib/utils"; // Import cn utility
 
 interface ProductDetails {
   productName: string;
@@ -135,9 +136,12 @@ export default function Inventory() {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
-      <div className="w-full max-w-6xl flex justify-between items-center mb-8">
-        <h1 className="page-title text-left flex-grow">Inventory</h1>
-        <Button onClick={handleGoBack} className="btn-primary">
+      <div className="w-full max-w-6xl flex justify-between items-center mb-10"> {/* Increased margin */}
+         <h1 className="page-title text-left flex-grow flex items-center gap-3 mb-0"> {/* Added gap, removed margin */}
+            <Package className="h-8 w-8 text-primary"/> {/* Package icon */}
+             Current Inventory
+         </h1>
+        <Button onClick={handleGoBack} className="btn-primary btn">
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Product
         </Button>
       </div>
@@ -145,22 +149,23 @@ export default function Inventory() {
       {productDetails && productDetails.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-6xl">
           {productDetails.map((product, index) => (
-            <Card key={index} className="w-full transition-transform transform hover:scale-105 hover:shadow-xl flex flex-col">
+            <Card key={index} className="card w-full flex flex-col overflow-hidden group"> {/* Added group */}
               <CardHeader className="pb-2">
                  {/* Product Image */}
-                 <div className="relative w-full h-48 mb-4 rounded-t-lg overflow-hidden">
+                 <div className="relative w-full h-48 mb-4 rounded-t-lg overflow-hidden border-b"> {/* Added border */}
                    <Image
                      src={product.productImage || `https://picsum.photos/seed/${encodeURIComponent(product.productName)}/400/300`}
                      alt={product.productName}
                      layout="fill"
                      objectFit="cover"
+                     className="transition-transform duration-300 group-hover:scale-105" // Added effect
                      data-ai-hint="product item"
                    />
                  </div>
                 <CardTitle className="text-lg font-semibold truncate" title={product.productName}>{product.productName}</CardTitle>
                 <CardDescription>Current Stock: <span className="font-medium text-foreground">{product.quantity}</span></CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 text-sm flex-grow">
+              <CardContent className="grid gap-2 text-sm flex-grow px-6 pb-4 pt-0"> {/* Adjusted padding */}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Unit Price Paid:</span>
                   <span className="font-semibold">${calculateUnitPricePaid(product)}</span>
@@ -172,7 +177,7 @@ export default function Inventory() {
                    </div>
                  )}
               </CardContent>
-               <div className="p-4 pt-2 mt-auto border-t border-border/50 flex justify-end gap-2">
+               <div className="p-4 pt-2 mt-auto border-t border-border/50 flex justify-end gap-2 bg-muted/30"> {/* Added bg */}
                   <Button onClick={() => handleEditProduct(index)} variant="outline" size="sm" className="btn">
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -184,13 +189,13 @@ export default function Inventory() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16">
+        <div className="text-center py-16 w-full max-w-md mx-auto bg-card p-10 rounded-lg shadow-md border"> {/* Enhanced empty state */}
             <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-4 text-lg font-semibold">No Products Found</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-                Your inventory is empty. Add a product to get started.
+            <p className="mt-2 text-sm text-muted-foreground">
+                Your inventory is currently empty. Add a product using the button below to get started tracking your items.
             </p>
-            <Button className="mt-6 btn-primary" onClick={handleGoBack}>
+            <Button className="mt-6 btn-primary btn" onClick={handleGoBack}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add First Product
             </Button>
@@ -222,7 +227,7 @@ export default function Inventory() {
                     type="number"
                     value={editPricePaid}
                     onChange={(e) => setEditPricePaid(e.target.value)}
-                    className="pl-8 input"
+                    className="pl-8 input" // Use input class
                     step="0.01"
                     min="0"
                   />
@@ -237,7 +242,7 @@ export default function Inventory() {
                 type="number"
                 value={editQuantity}
                 onChange={(e) => setEditQuantity(e.target.value)}
-                className="col-span-3 input"
+                className="col-span-3 input" // Use input class
                 min="0" // Allow 0, filtering happens on display/storage
               />
             </div>
@@ -252,7 +257,7 @@ export default function Inventory() {
                    type="number"
                    value={editCostPrice}
                    onChange={(e) => setEditCostPrice(e.target.value)}
-                   className="pl-8 input"
+                   className="pl-8 input" // Use input class
                    placeholder="Optional"
                    step="0.01"
                    min="0"
@@ -273,8 +278,8 @@ export default function Inventory() {
             </div> */}
           </div>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)}>Cancel</Button>
-            <Button type="button" onClick={handleUpdateProduct} className="btn-primary">Save Changes</Button>
+            <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn">Cancel</Button>
+            <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -289,7 +294,7 @@ export default function Inventory() {
              </DialogDescription>
            </DialogHeader>
            <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)}>
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn">
                Cancel
              </Button>
              <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn">
@@ -304,4 +309,4 @@ export default function Inventory() {
 }
 
 // Helper component for empty state
-import { PackageSearch } from 'lucide-react';
+// import { PackageSearch } from 'lucide-react'; // Already imported above

@@ -9,8 +9,8 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow duration-200 ease-in-out", // Added transition
-      'card', // Added global card class for hover effects etc.
+      "rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow duration-200 ease-in-out", // Base transition
+      'card', // Global card class for hover effects etc. from globals.css
       className
     )}
     {...props}
@@ -63,7 +63,7 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} /> // Standard padding, adjust pt-0 if header is always present
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} /> // Standard padding, ensure pt-0 if header is present
 ))
 CardContent.displayName = "CardContent"
 
