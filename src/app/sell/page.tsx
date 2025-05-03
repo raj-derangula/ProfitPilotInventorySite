@@ -312,8 +312,8 @@ export default function SellPage() {
                                           return (
                                             <SelectItem key={product.productName} value={product.productName}>
                                                 <div className="flex justify-between w-full">
-                                                    <span>{product.productName}</span>
-                                                    <span className="text-xs text-muted-foreground ml-2">
+                                                    <span className="truncate pr-2">{product.productName}</span> {/* Truncate long names */}
+                                                    <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap"> {/* Prevent wrapping */}
                                                         (Stock: {product.quantity}, Paid: ${unitPaid})
                                                     </span>
                                                 </div>
@@ -394,7 +394,7 @@ export default function SellPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => append({productName: "", salePrice: "", quantitySold: ""})}
-                    className="btn mt-4" // Added margin-top
+                    className="btn mt-4 w-full sm:w-auto" // Full width on mobile
                    >
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Add Another Product
@@ -441,7 +441,7 @@ export default function SellPage() {
 
               {/* Submit and Go Back Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t mt-10"> {/* Added padding/margin top, border */}
-                 <Button type="submit" className="flex-1 btn-primary btn" disabled={isSubmitting}>
+                 <Button type="submit" className="flex-1 btn-primary btn w-full sm:w-auto" disabled={isSubmitting}> {/* Full width on mobile */}
                     {isSubmitting ? (
                         <>
                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-primary-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> {/* Adjusted color */}
@@ -454,7 +454,7 @@ export default function SellPage() {
                        "Record Sale"
                     )}
                  </Button>
-                 <Button type="button" variant="outline" className="flex-1 btn" onClick={handleGoToInventory}>
+                 <Button type="button" variant="outline" className="flex-1 btn w-full sm:w-auto" onClick={handleGoToInventory}> {/* Full width on mobile */}
                     <Package className="mr-2 h-4 w-4"/> Go To Inventory
                  </Button>
               </div>

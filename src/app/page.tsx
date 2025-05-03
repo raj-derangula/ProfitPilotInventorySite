@@ -673,7 +673,7 @@ export default function Home() {
       <h1 className="page-title">Add New Product</h1>
 
        {/* Upload and Manual Entry Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full max-w-6xl"> {/* Change to lg for breakpoint */}
          {/* Screenshot Upload Card */}
         <Card className="card transition-all duration-300 hover:shadow-xl"> {/* Use card class, add transition */}
           <CardHeader>

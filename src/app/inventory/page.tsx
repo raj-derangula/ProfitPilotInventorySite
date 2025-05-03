@@ -136,12 +136,12 @@ export default function Inventory() {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
-      <div className="w-full max-w-6xl flex justify-between items-center mb-10"> {/* Increased margin */}
-         <h1 className="page-title text-left flex-grow flex items-center gap-3 mb-0"> {/* Added gap, removed margin */}
+      <div className="w-full max-w-6xl flex flex-col sm:flex-row justify-between items-center mb-10 gap-4"> {/* Adjusted flex for mobile, added gap */}
+         <h1 className="page-title text-center sm:text-left flex-grow flex items-center justify-center sm:justify-start gap-3 mb-0"> {/* Center on mobile, left on sm+, remove mb */}
             <Package className="h-8 w-8 text-primary"/> {/* Package icon */}
              Current Inventory
          </h1>
-        <Button onClick={handleGoBack} className="btn-primary btn">
+        <Button onClick={handleGoBack} className="btn-primary btn w-full sm:w-auto"> {/* Full width on mobile */}
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Product
         </Button>
       </div>
@@ -195,7 +195,7 @@ export default function Inventory() {
             <p className="mt-2 text-sm text-muted-foreground">
                 Your inventory is currently empty. Add a product using the button below to get started tracking your items.
             </p>
-            <Button className="mt-6 btn-primary btn" onClick={handleGoBack}>
+            <Button className="mt-6 btn-primary btn w-full" onClick={handleGoBack}> {/* Full width button */}
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add First Product
             </Button>
@@ -277,9 +277,9 @@ export default function Inventory() {
               />
             </div> */}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn">Cancel</Button>
-            <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn">Save Changes</Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+            <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn w-full sm:w-auto">Cancel</Button>
+            <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn w-full sm:w-auto">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -293,11 +293,11 @@ export default function Inventory() {
                Are you sure you want to remove <span className="font-bold">{productDetails[openRemoveDialog!]?.productName}</span> from your inventory? This action cannot be undone.
              </DialogDescription>
            </DialogHeader>
-           <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn">
+           <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn w-full sm:w-auto">
                Cancel
              </Button>
-             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn">
+             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn w-full sm:w-auto">
                Remove Product
              </Button>
            </DialogFooter>

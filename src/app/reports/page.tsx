@@ -12,7 +12,7 @@ import { TrendingUp, TrendingDown, DollarSign, ListOrdered, CalendarDays, Filter
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns"; // Import date-fns functions
 
 interface ProductDetails { // Represents current inventory items
   productName: string;
@@ -45,8 +45,8 @@ interface PurchasedProduct { // Represents an item entry in the archive
 }
 
 export default function Reports() {
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(null); // Default to null
+  const [endDate, setEndDate] = useState<Date | null>(null); // Default to null
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -136,32 +136,21 @@ export default function Reports() {
     // Calculate Total Spending (All Time) - based on the archive
     // This represents the total amount spent acquiring all products ever listed in the archive.
     const allTimeTotalSpent = allPurchasedProducts.reduce((acc: number, product: PurchasedProduct) => {
-        // Use original quantity and derived unit cost for consistent calculation
-        const originalQty = parseInt(product.originalQuantityPurchased || "0", 10);
-        let unitCost = 0;
-        if (product.costPrice && !isNaN(parseFloat(product.costPrice))) {
-           unitCost = parseFloat(product.costPrice);
-        } else {
-            const totalPaid = parseFloat(product.pricePaid || "0");
-            unitCost = originalQty > 0 && !isNaN(totalPaid) ? totalPaid / originalQty : 0;
-        }
-         // Add the total cost for the original quantity of this product batch
-        return acc + (isNaN(unitCost * originalQty) ? 0 : unitCost * originalQty);
+        const totalPaid = parseFloat(product.pricePaid || "0");
+        return acc + (isNaN(totalPaid) ? 0 : totalPaid);
     }, 0);
     setTotalSpent(allTimeTotalSpent);
 
     // Determine the date range for filtering sales
-    let effectiveStartDate = start ? new Date(start) : new Date(0); // Beginning of time if no start date
-    let effectiveEndDate = end ? new Date(end) : new Date(); // Now if no end date
-
-    // Adjust dates for comparison (inclusive range)
-    effectiveStartDate.setHours(0, 0, 0, 0);
-    effectiveEndDate.setHours(23, 59, 59, 999); // Include the whole end day
+    // If start and end are null, consider all time.
+    let effectiveStartDate = start ? startOfDay(start) : new Date(0); // Beginning of time if no start date
+    let effectiveEndDate = end ? endOfDay(end) : new Date(); // End of today if no end date
 
 
      // Filter sales within the date range
      const salesInRange = salesData.filter((sale: SalesData) => {
          const saleDate = new Date(sale.dateOfSale); // Ensure it's a date object
+         // Ensure the comparison is valid even if dates are null
          return saleDate >= effectiveStartDate && saleDate <= effectiveEndDate;
      });
      setFilteredSalesData(salesInRange); // Update the list of sales orders displayed
@@ -388,10 +377,11 @@ export default function Reports() {
              <CalendarDays className="h-5 w-5 text-primary" />
              Filter by Date Range
            </CardTitle>
+           <CardDescription>Select start and end dates to view reports for a specific period. Leave blank for all time.</CardDescription> {/* Added description */}
          </CardHeader>
-         <CardContent className="flex flex-col sm:flex-row items-center gap-4">
+         <CardContent className="flex flex-col md:flex-row items-center gap-4"> {/* Adjust flex direction */}
               {/* Start Date Popover */}
-             <div className="flex-1 w-full sm:w-auto">
+             <div className="flex-1 w-full md:w-auto">
                  <Label htmlFor="start-date-btn" className="mb-1 block text-sm font-medium">Start Date</Label>
                  <Popover>
                     <PopoverTrigger asChild>
@@ -419,7 +409,7 @@ export default function Reports() {
                   </Popover>
              </div>
              {/* End Date Popover */}
-             <div className="flex-1 w-full sm:w-auto">
+             <div className="flex-1 w-full md:w-auto">
                  <Label htmlFor="end-date-btn" className="mb-1 block text-sm font-medium">End Date</Label>
                  <Popover>
                     <PopoverTrigger asChild>
@@ -447,7 +437,7 @@ export default function Reports() {
                   </Popover>
              </div>
              {/* Clear Button */}
-              <Button onClick={clearDates} variant="outline" className="mt-4 sm:mt-6 btn">
+              <Button onClick={clearDates} variant="outline" className="mt-4 md:mt-6 btn md:self-end"> {/* Align button properly */}
                  <FilterX className="mr-2 h-4 w-4" /> Clear Dates
               </Button>
          </CardContent>
@@ -533,7 +523,7 @@ export default function Reports() {
 
                     return (
                       <li key={sale.id} className="p-4 hover:bg-accent/50 transition-colors group relative"> {/* Added relative */}
-                        <div className="flex justify-between items-start mb-3"> {/* Increased margin */}
+                        <div className="flex flex-col sm:flex-row justify-between items-start mb-3 gap-3 sm:gap-0"> {/* Adjust layout and gap */}
                             <div>
                                 <p className="font-semibold text-base">
                                 Sale Date: {format(sale.dateOfSale, "PPP")} {/* Formatted Date */}
@@ -541,7 +531,7 @@ export default function Reports() {
                                 <p className="text-xs text-muted-foreground mt-0.5">ID: {sale.id}</p>
                             </div>
                              {/* Sale Summary */}
-                             <div className="text-right text-xs space-y-1 flex-shrink-0 ml-4 bg-muted/40 px-3 py-2 rounded-md border subtle-border">
+                             <div className="text-left sm:text-right text-xs space-y-1 flex-shrink-0 sm:ml-4 bg-muted/40 px-3 py-2 rounded-md border subtle-border w-full sm:w-auto"> {/* Adjust width and text align */}
                                 <div>Revenue: <span className="font-medium">${saleRevenue.toFixed(2)}</span></div>
                                 <div>Cost: <span className="font-medium">${saleCost.toFixed(2)}</span></div>
                                 <div className={cn("font-semibold", saleProfit >= 0 ? 'text-green-600' : 'text-red-600')}>
@@ -675,9 +665,9 @@ export default function Reports() {
                  {/* Consider adding 'Add Item' button here if needed */}
 
             </div>
-            <DialogFooter>
-                <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn">Cancel</Button>
-                <Button type="button" onClick={handleUpdateSale} className="btn-primary btn">Save Changes</Button>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+                <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn w-full sm:w-auto">Cancel</Button>
+                <Button type="button" onClick={handleUpdateSale} className="btn-primary btn w-full sm:w-auto">Save Changes</Button>
             </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -692,11 +682,11 @@ export default function Reports() {
                Are you sure you want to remove sale order <span className="font-bold">{openRemoveDialog}</span>? This action cannot be undone and will add the sold items back to your inventory counts.
              </DialogDescription>
            </DialogHeader>
-           <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn">
+           <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn w-full sm:w-auto">
                Cancel
              </Button>
-             <Button variant="destructive" onClick={() => handleRemoveSale(openRemoveDialog!)} className="btn">
+             <Button variant="destructive" onClick={() => handleRemoveSale(openRemoveDialog!)} className="btn w-full sm:w-auto">
                Confirm Removal
              </Button>
            </DialogFooter>

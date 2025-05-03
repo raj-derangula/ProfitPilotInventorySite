@@ -155,11 +155,11 @@ export default function ArchivedInventory() {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
-       <div className="w-full max-w-6xl flex justify-between items-center mb-10"> {/* Increased margin */}
-         <h1 className="page-title text-left flex-grow flex items-center gap-3 mb-0"> {/* Added gap, removed margin */}
+       <div className="w-full max-w-6xl flex flex-col sm:flex-row justify-between items-center mb-10 gap-4"> {/* Adjusted flex for mobile, added gap */}
+         <h1 className="page-title text-center sm:text-left flex-grow flex items-center justify-center sm:justify-start gap-3 mb-0"> {/* Center on mobile, left on sm+, remove mb */}
             <Archive className="h-8 w-8 text-primary"/> Archived Inventory
          </h1>
-         <Button onClick={handleGoBack} className="btn-primary btn">
+         <Button onClick={handleGoBack} className="btn-primary btn w-full sm:w-auto"> {/* Full width on mobile */}
            <PlusCircle className="mr-2 h-4 w-4" /> Add New Product
          </Button>
        </div>
@@ -221,7 +221,7 @@ export default function ArchivedInventory() {
             <p className="mt-2 text-sm text-muted-foreground">
                 Products you purchase will appear here for historical tracking, even after they are sold out or removed from current inventory.
             </p>
-             <Button className="mt-6 btn-primary btn" onClick={handleGoBack}>
+             <Button className="mt-6 btn-primary btn w-full" onClick={handleGoBack}> {/* Full width button */}
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add Your First Product
             </Button>
@@ -302,9 +302,9 @@ export default function ArchivedInventory() {
               </div>
             </div>
           </div>
-          <DialogFooter>
-             <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn">Cancel</Button>
-            <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn">Save Changes</Button>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+             <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn w-full sm:w-auto">Cancel</Button>
+             <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn w-full sm:w-auto">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -318,11 +318,11 @@ export default function ArchivedInventory() {
                Are you sure you want to permanently remove <span className="font-bold">{archivedProductDetails[openRemoveDialog!]?.productName}</span> from the archive and current inventory? This will affect historical reporting data. This action cannot be undone.
              </DialogDescription>
            </DialogHeader>
-           <DialogFooter>
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn">
+           <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn w-full sm:w-auto">
                Cancel
              </Button>
-             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn">
+             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn w-full sm:w-auto">
                Confirm Removal
              </Button>
            </DialogFooter>
