@@ -7,7 +7,7 @@ A web app that tracks inventory, revenue, and profit across products using the G
 - Gemini API (Google AI Studio)
 
 ## Live Demo
-[Live Demo](REPLACE_WITH_VERCEL_URL)
+[Live Demo](https://profit-pilot-inventory-site.vercel.app)
 
 ## How to Run Locally
 1. Clone the repo
