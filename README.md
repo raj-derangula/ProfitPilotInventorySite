@@ -1,5 +1,16 @@
-# Firebase Studio
+# Reselling Inventory Tracker
 
-This is a NextJS starter in Firebase Studio.
+A web app that tracks inventory, revenue, and profit across products using the Gemini AI API to process product data.
 
-To get started, take a look at src/app/page.tsx.
+## Tech Stack
+- React
+- Gemini API (Google AI Studio)
+
+## Live Demo
+[Live Demo](REPLACE_WITH_VERCEL_URL)
+
+## How to Run Locally
+1. Clone the repo
+2. Run `npm install`
+3. Create a `.env` file in the root with: `REACT_APP_GEMINI_API_KEY=your_key_here`
+4. Run `npm start`
