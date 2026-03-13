@@ -191,7 +191,7 @@ export default function SalesPage() {
   const today = new Date();
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10">
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4">
       <h1 className="text-3xl font-bold mb-4">Record a Sale</h1>
       <Card className="w-full max-w-4xl p-4">
         <CardHeader>
@@ -280,7 +280,7 @@ export default function SalesPage() {
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-[240px] pl-3 text-left font-normal",
+                              "w-full sm:w-[240px] pl-3 text-left font-normal",
                               !field.value && "text-muted-foreground"
                             )}
                           >

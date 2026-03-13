@@ -367,7 +367,7 @@ export default function Reports() {
 
     // --- Render ---
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4">
       <h1 className="page-title mb-10">Reports Dashboard</h1>
 
        {/* Date Filter Section */}
@@ -437,14 +437,14 @@ export default function Reports() {
                   </Popover>
              </div>
              {/* Clear Button */}
-              <Button onClick={clearDates} variant="outline" className="mt-4 md:mt-6 btn md:self-end"> {/* Align button properly */}
+              <Button onClick={clearDates} variant="outline" className="mt-4 md:mt-6 btn w-full md:w-auto md:self-end"> {/* Align button properly */}
                  <FilterX className="mr-2 h-4 w-4" /> Clear Dates
               </Button>
          </CardContent>
        </Card>
 
         {/* Key Metrics Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-10"> {/* Increased bottom margin */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-4xl mb-6 sm:mb-10"> {/* Increased bottom margin */}
             {/* Total Spending Card */}
             <Card className="card shadow-md hover:shadow-lg transition-shadow duration-200"> {/* Use card class */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -551,7 +551,7 @@ export default function Reports() {
                             </ul>
                         </div>
                          {/* Edit/Remove Buttons - Appear on hover */}
-                          <div className="absolute top-3 right-3 flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <div className="absolute top-3 right-3 flex justify-end gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
                              <Button onClick={() => handleEditSale(sale.id)} variant="outline" size="icon" className="btn h-7 w-7">
                                 <Edit className="h-4 w-4" />
                                 <span className="sr-only">Edit Sale</span>
@@ -586,15 +586,15 @@ export default function Reports() {
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-4"> {/* Scrollable content */}
                  {/* Date Picker */}
-                 <div className="grid grid-cols-4 items-center gap-4">
-                     <Label htmlFor="edit-sale-date" className="text-right">Date</Label>
+                 <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+                     <Label htmlFor="edit-sale-date" className="sm:text-right">Date</Label>
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
                             variant={"outline"}
                             id="edit-sale-date"
                             className={cn(
-                              "col-span-3 justify-start text-left font-normal input",
+                              "sm:col-span-3 justify-start text-left font-normal input",
                               !editDateOfSale && "text-muted-foreground"
                             )}
                           >
@@ -616,14 +616,14 @@ export default function Reports() {
 
                 {/* Products Sold List */}
                 {editProductsSold.map((product, index) => (
-                    <div key={`edit-${index}`} className="grid grid-cols-4 items-start gap-4 border-b pb-4">
-                         <Label className="text-right pt-2 col-span-1">Item {index + 1}</Label>
-                         <div className="col-span-3 grid gap-2">
+                    <div key={`edit-${index}`} className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2 sm:gap-4 border-b pb-4">
+                         <Label className="sm:text-right pt-2 sm:col-span-1 font-semibold">Item {index + 1}</Label>
+                         <div className="sm:col-span-3 grid gap-2">
                              {/* Product Name (Read-only) */}
                              <Input value={product.productName} readOnly className="input bg-muted" title="Product name cannot be changed here"/>
 
                              {/* Quantity Sold */}
-                              <div className="grid grid-cols-4 items-center gap-4">
+                              <div className="grid grid-cols-3 sm:grid-cols-4 items-center gap-2 sm:gap-4">
                                  <Label htmlFor={`edit-qty-${index}`} className="text-right text-xs">Qty</Label>
                                  <Input
                                     id={`edit-qty-${index}`}
@@ -640,9 +640,9 @@ export default function Reports() {
                               </div>
 
                               {/* Sale Price */}
-                               <div className="grid grid-cols-4 items-center gap-4">
+                               <div className="grid grid-cols-3 sm:grid-cols-4 items-center gap-2 sm:gap-4">
                                  <Label htmlFor={`edit-price-${index}`} className="text-right text-xs">Price</Label>
-                                 <div className="relative col-span-3">
+                                 <div className="relative col-span-2 sm:col-span-3">
                                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
                                      <Input
                                         id={`edit-price-${index}`}

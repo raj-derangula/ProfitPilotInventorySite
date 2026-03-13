@@ -669,7 +669,7 @@ export default function Home() {
 
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4 space-y-10"> {/* Increased base spacing */}
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-10"> {/* Increased base spacing */}
       <h1 className="page-title">Add New Product</h1>
 
        {/* Upload and Manual Entry Section */}
@@ -700,7 +700,7 @@ export default function Home() {
                   className="transition-transform duration-300 group-hover:scale-105"
                   data-ai-hint="order screenshot"
                 />
-                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="absolute top-2 right-2 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
                   <Button
                     variant="destructive"
                     size="icon"
@@ -897,7 +897,7 @@ export default function Home() {
                     />
                     {pendingProducts.map((product, index) => (
                         <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-shadow duration-200 hover:shadow-md bg-background"> {/* Added bg */}
-                            <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"> {/* Adjusted positioning and gap */}
+                            <div className="absolute top-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-10"> {/* Adjusted positioning and gap */}
                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700 btn rounded-full" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product" title="Approve">
                                      <CheckCircle className="h-5 w-5" />
                                  </Button>

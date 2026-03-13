@@ -273,7 +273,7 @@ export default function SellPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4">
       <h1 className="page-title mb-10">Record a New Sale</h1> {/* Increased margin */}
       <Card className="w-full max-w-4xl p-0 shadow-xl card"> {/* Use card class */}
         <CardHeader className="bg-muted/30 p-6 rounded-t-lg border-b">
