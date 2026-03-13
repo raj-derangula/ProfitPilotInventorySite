@@ -275,49 +275,24 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
-// Updated SidebarTrigger: Also acts as SheetTrigger on mobile
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
   const { toggleSidebar, isMobile } = useSidebar();
 
-   if (isMobile === undefined) return null; // Avoid rendering during hydration mismatch
+  if (isMobile === undefined) return null;
 
-  // On mobile, wrap the Button in SheetPrimitiveTrigger
-  if (isMobile) {
-    return (
-       <SheetPrimitiveTrigger asChild>
-          <Button
-            ref={ref}
-            data-sidebar="trigger"
-            variant="ghost"
-            size="icon"
-            className={cn("h-8 w-8 btn md:hidden", className)} // Ensure it's hidden on md+
-            onClick={(event) => {
-                onClick?.(event);
-                // toggleSidebar(); // Sheet handles its own open/close via trigger
-            }}
-            {...props}
-            >
-            <PanelLeft className="h-5 w-5"/>
-            <span className="sr-only">Toggle Sidebar</span>
-          </Button>
-       </SheetPrimitiveTrigger>
-    );
-  }
-
-  // On desktop, render the button as before
   return (
     <Button
       ref={ref}
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-8 w-8 btn hidden md:inline-flex", className)} // Ensure it's hidden on mobile, inline-flex on md+
+      className={cn("h-8 w-8 btn", className)}
       onClick={(event) => {
         onClick?.(event);
-        toggleSidebar(); // Desktop toggles internal state
+        toggleSidebar();
       }}
       {...props}
     >
