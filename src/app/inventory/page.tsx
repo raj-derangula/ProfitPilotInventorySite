@@ -135,7 +135,7 @@ export default function Inventory() {
 
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-10 px-4">
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4">
       <div className="w-full max-w-6xl flex flex-col sm:flex-row justify-between items-center mb-10 gap-4"> {/* Adjusted flex for mobile, added gap */}
          <h1 className="page-title text-center sm:text-left flex-grow flex items-center justify-center sm:justify-start gap-3 mb-0"> {/* Center on mobile, left on sm+, remove mb */}
             <Package className="h-8 w-8 text-primary"/> {/* Package icon */}
@@ -165,7 +165,7 @@ export default function Inventory() {
                 <CardTitle className="text-lg font-semibold truncate" title={product.productName}>{product.productName}</CardTitle>
                 <CardDescription>Current Stock: <span className="font-medium text-foreground">{product.quantity}</span></CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 text-sm flex-grow px-6 pb-4 pt-0"> {/* Adjusted padding */}
+              <CardContent className="grid gap-2 text-sm flex-grow px-4 sm:px-6 pb-4 pt-0"> {/* Adjusted padding */}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Unit Price Paid:</span>
                   <span className="font-semibold">${calculateUnitPricePaid(product)}</span>
@@ -210,17 +210,17 @@ export default function Inventory() {
             <DialogDescription>Make changes to your product details. Click save when finished.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
+            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+              <Label htmlFor="name" className="sm:text-right">
                 Name
               </Label>
-              <Input id="name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} className="col-span-3 input" />
+              <Input id="name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} className="sm:col-span-3 input" />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="price" className="text-right">
+            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+              <Label htmlFor="price" className="sm:text-right">
                 Total Price Paid
               </Label>
-               <div className="relative col-span-3">
+               <div className="relative sm:col-span-3">
                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
                    <Input
                     id="price"
@@ -233,8 +233,8 @@ export default function Inventory() {
                   />
                </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="quantity" className="text-right">
+            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+              <Label htmlFor="quantity" className="sm:text-right">
                 Quantity
               </Label>
               <Input
@@ -242,15 +242,15 @@ export default function Inventory() {
                 type="number"
                 value={editQuantity}
                 onChange={(e) => setEditQuantity(e.target.value)}
-                className="col-span-3 input" // Use input class
+                className="sm:col-span-3 input" // Use input class
                 min="0" // Allow 0, filtering happens on display/storage
               />
             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="cost" className="text-right">
+             <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
+              <Label htmlFor="cost" className="sm:text-right">
                 Unit Cost Price
               </Label>
-               <div className="relative col-span-3">
+               <div className="relative sm:col-span-3">
                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
                  <Input
                    id="cost"
