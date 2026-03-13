@@ -8,7 +8,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-import Script from "next/script";
 
 const roboto = Roboto({
   weight: ['400', '500', '700'],
@@ -27,15 +26,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn(roboto.className)} suppressHydrationWarning>
+    <html lang="en" className={cn(roboto.className, "light")} suppressHydrationWarning>
       <body className="min-h-screen antialiased bg-background text-foreground">
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.add('light')}}catch(e){}})()`,
-          }}
-        />
+        {/* Plain script tag runs synchronously before React hydrates — safe in Server Components */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.classList.remove('light')}else{document.documentElement.classList.add('light');document.documentElement.classList.remove('dark')}}catch(e){}})()` }} />
         <ThemeProvider>
           <SidebarProvider>
             <div data-sidebar-wrapper>
