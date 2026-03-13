@@ -8,6 +8,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import Script from "next/script";
 
 const roboto = Roboto({
   weight: ['400', '500', '700'],
@@ -27,15 +28,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn(roboto.className)} suppressHydrationWarning>
-      <head>
-        {/* Inline script to set theme class before paint to avoid flash */}
-        <script
+      <body className="min-h-screen antialiased bg-background text-foreground">
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.add('light')}}catch(e){}})()`,
           }}
         />
-      </head>
-      <body className="min-h-screen antialiased bg-background text-foreground">
         <ThemeProvider>
           <SidebarProvider>
             <div data-sidebar-wrapper>
