@@ -1,11 +1,10 @@
-// using server directive tells nextjs that this is backend code.
-'use server';
-
 /**
  * @fileOverview Multi-signal product identification from images/video frames.
  *
  * Uses visual appearance, OCR text, and user history to identify items
  * with confidence scores for auto-approve routing.
+ *
+ * NOTE: This file is server-only (imported by API route, NOT by client code).
  */
 
 import {ai} from '@/ai/ai-instance';
@@ -44,17 +43,7 @@ const ExtractProductDetailsOutputSchema = z.object({
 });
 export type ExtractProductDetailsOutput = z.infer<typeof ExtractProductDetailsOutputSchema>;
 
-// Legacy single-item output for backward compat with existing callers
 export type ExtractedItem = z.infer<typeof ExtractedItemSchema>;
-
-export async function extractProductDetails(input: ExtractProductDetailsInput): Promise<ExtractProductDetailsOutput> {
-  if (!process.env.REACT_APP_GEMINI_API_KEY) {
-    throw new Error(
-      'Gemini API key is not configured. Create a .env file in the project root with:\nREACT_APP_GEMINI_API_KEY=your_key_here\n\nGet a free key at https://aistudio.google.com/apikey'
-    );
-  }
-  return extractProductDetailsFlow(input);
-}
 
 const prompt = ai.definePrompt({
   name: 'extractProductDetailsPrompt',
@@ -109,7 +98,7 @@ If the item looks like something in the user's history, set matchedHistoryItem t
 {{/each}}`,
 });
 
-const extractProductDetailsFlow = ai.defineFlow<
+export const extractProductDetailsFlow = ai.defineFlow<
   typeof ExtractProductDetailsInputSchema,
   typeof ExtractProductDetailsOutputSchema
 >({

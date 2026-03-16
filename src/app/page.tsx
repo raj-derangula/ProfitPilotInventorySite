@@ -7,7 +7,7 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Checkbox} from "@/components/ui/checkbox";
 import {useToast} from "@/hooks/use-toast";
-import {extractProductDetails, type ExtractedItem} from "@/ai/flows/extract-product-details";
+import type {ExtractProductDetailsInput, ExtractProductDetailsOutput, ExtractedItem} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
 import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop, AlertTriangle} from "lucide-react";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form";
@@ -41,6 +41,24 @@ import {
   initDB,
 } from "@/lib/db";
 import { validateVideoFile } from "@/lib/video-frames";
+
+// Call the genkit flow via API route (not a server action, to avoid webpack bundling issues)
+async function extractProductDetails(input: ExtractProductDetailsInput): Promise<ExtractProductDetailsOutput> {
+  const res = await fetch('/api/extract-product', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: input }),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null);
+    const message = errorBody?.error?.message || errorBody?.error || `AI request failed (${res.status})`;
+    throw new Error(message);
+  }
+
+  const json = await res.json();
+  return json.result;
+}
 
 // Auto-approve threshold
 const HIGH_CONFIDENCE = 0.85;
