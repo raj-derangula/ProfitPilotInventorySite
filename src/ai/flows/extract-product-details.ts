@@ -48,6 +48,11 @@ export type ExtractProductDetailsOutput = z.infer<typeof ExtractProductDetailsOu
 export type ExtractedItem = z.infer<typeof ExtractedItemSchema>;
 
 export async function extractProductDetails(input: ExtractProductDetailsInput): Promise<ExtractProductDetailsOutput> {
+  if (!process.env.REACT_APP_GEMINI_API_KEY) {
+    throw new Error(
+      'Gemini API key is not configured. Create a .env file in the project root with:\nREACT_APP_GEMINI_API_KEY=your_key_here\n\nGet a free key at https://aistudio.google.com/apikey'
+    );
+  }
   return extractProductDetailsFlow(input);
 }
 

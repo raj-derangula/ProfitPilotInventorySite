@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '20mb', // iPhone photos/videos can be large as base64
+    },
+  },
   images: {
     remotePatterns: [
       {
