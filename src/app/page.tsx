@@ -9,7 +9,7 @@ import {Checkbox} from "@/components/ui/checkbox";
 import {useToast} from "@/hooks/use-toast";
 import {extractProductDetails, type ExtractedItem} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop, Video, AlertTriangle} from "lucide-react";
+import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop, AlertTriangle} from "lucide-react";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
@@ -40,11 +40,19 @@ import {
   addCorrection,
   initDB,
 } from "@/lib/db";
-import { validateVideoFile, extractFrames } from "@/lib/video-frames";
+import { validateVideoFile } from "@/lib/video-frames";
 
 // Auto-approve threshold
 const HIGH_CONFIDENCE = 0.85;
 const LOW_CONFIDENCE = 0.5;
+
+// Staged file for two-step upload flow (select → preview → process)
+interface StagedFile {
+  file: File;
+  previewUrl: string; // object URL for preview
+  dataUri: string;    // base64 data URI for Gemini
+  isVideo: boolean;
+}
 
 // Schema for the main form and pending products
 const productDetailsSchema = z.object({
@@ -112,7 +120,7 @@ interface PendingProduct extends ProductDetailsFormValues {
 }
 
 export default function Home() {
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [suggestedSellingPrice, setSuggestedSellingPrice] = useState<number | null>(null);
   const [isProcessingUploads, setIsProcessingUploads] = useState(false);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
@@ -226,13 +234,61 @@ export default function Home() {
         });
     };
 
-  // Process uploaded files (images + videos)
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Step 1: Stage files for preview (no AI processing yet)
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    // Clean up old preview URLs
+    stagedFiles.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
+
+    const newStaged: StagedFile[] = [];
+
+    for (const file of Array.from(files)) {
+      const isVideo = file.type.startsWith('video/');
+
+      // Validate videos
+      if (isVideo) {
+        const validationError = validateVideoFile(file);
+        if (validationError) {
+          toast({ variant: "destructive", title: `Video Error (${file.name})`, description: validationError.error });
+          continue;
+        }
+      }
+
+      // Create object URL for preview (works for both images and videos)
+      const previewUrl = URL.createObjectURL(file);
+
+      // Read file as data URI for Gemini
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      newStaged.push({ file, previewUrl, dataUri, isVideo });
+    }
+
+    setStagedFiles(newStaged);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    if (newStaged.length > 0) {
+      toast({
+        title: `${newStaged.length} file(s) ready`,
+        description: "Preview your upload, then tap Process to identify items with AI.",
+      });
+    }
+  };
+
+  // Step 2: Process staged files with Gemini
+  const handleProcessStagedFiles = async () => {
+    if (stagedFiles.length === 0) return;
+
     setIsProcessingUploads(true);
-    setScreenshotPreview(null);
 
     let successCount = 0;
     let errorCount = 0;
@@ -252,48 +308,21 @@ export default function Home() {
       console.warn('Failed to load context for AI:', e);
     }
 
-    for (const file of Array.from(files)) {
+    for (const staged of stagedFiles) {
       try {
-        let mediaDataUris: string[];
-
-        if (file.type.startsWith('video/')) {
-          // Video: validate and extract frames
-          const validationError = validateVideoFile(file);
-          if (validationError) {
-            toast({ variant: "destructive", title: `Video Error (${file.name})`, description: validationError.error });
-            errorCount++;
-            continue;
-          }
-
-          toast({ title: `Processing video: ${file.name}`, description: "Extracting frames..." });
-          const result = await extractFrames(file);
-          mediaDataUris = result.frames;
-          if (result.frames.length > 0) {
-            setScreenshotPreview(result.frames[0]);
-          }
-        } else {
-          // Image: convert to base64
-          const dataUri = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          mediaDataUris = [dataUri];
-          setScreenshotPreview(dataUri);
-        }
-
-        // Call enhanced Gemini
+        // Send the data URI directly to Gemini (works for both images and videos)
         const result = await extractProductDetails({
-          mediaDataUris,
+          mediaDataUris: [staged.dataUri],
           itemHistorySummary: historySummary || undefined,
           recentCorrections: corrections || undefined,
         });
 
+        // For product image, use the data URI for images, or a placeholder for videos
+        const productImageUri = staged.isVideo ? undefined : staged.dataUri;
+
         // Process each identified item
         for (const item of result.items) {
           const quantity = Math.max(1, item.quantityPurchased);
-          const imageUri = file.type.startsWith('video/') ? mediaDataUris[0] : mediaDataUris[0];
 
           const productData: PendingProduct = {
             productName: item.productName,
@@ -301,8 +330,8 @@ export default function Home() {
             quantity: quantity.toString(),
             originalQuantityPurchased: quantity.toString(),
             costPrice: "",
-            productImage: imageUri,
-            screenshotDataUri: imageUri,
+            productImage: productImageUri,
+            screenshotDataUri: productImageUri,
             category: item.category,
             sourcePlatform: item.sourcePlatform,
             visualDescription: item.visualDescription,
@@ -315,7 +344,6 @@ export default function Home() {
 
           // Confidence-based routing
           if (item.confidence >= HIGH_CONFIDENCE) {
-            // Auto-add high-confidence items
             await addProductToInventory({
               productName: productData.productName,
               pricePaid: productData.pricePaid,
@@ -330,7 +358,6 @@ export default function Home() {
             });
             autoAddedCount++;
           } else {
-            // Send to review
             newlyPendingProducts.push(productData);
             pendingCount++;
           }
@@ -338,21 +365,21 @@ export default function Home() {
 
         successCount++;
       } catch (error: any) {
-        console.error(`Error processing file ${file.name}:`, error);
+        console.error(`Error processing file ${staged.file.name}:`, error);
         toast({
           variant: "destructive",
-          title: `AI Error (${file.name})`,
+          title: `AI Error (${staged.file.name})`,
           description: error.message || "Failed to extract details.",
         });
         errorCount++;
       }
     }
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-
     setIsProcessingUploads(false);
+
+    // Clean up staged files
+    stagedFiles.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
+    setStagedFiles([]);
 
     if (newlyPendingProducts.length > 0) {
       setPendingProducts(prev => [...prev, ...newlyPendingProducts]);
@@ -419,7 +446,7 @@ export default function Home() {
     await addProductToInventory(dataToAdd);
 
     form.reset();
-    setScreenshotPreview(null);
+    handleClearStagedFiles(false);
     setSuggestedSellingPrice(null);
 
     if (pendingProducts.length === 0) {
@@ -432,14 +459,15 @@ export default function Home() {
     }
 };
 
-    const handleRemoveScreenshotPreview = (showToast = true) => {
-        setScreenshotPreview(null);
+    const handleClearStagedFiles = (showToast = true) => {
+        stagedFiles.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
+        setStagedFiles([]);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
         if (showToast) {
             toast({
-                title: "Preview Removed",
+                title: "Upload Cleared",
                 description: "Ready for new upload.",
             });
         }
@@ -730,41 +758,74 @@ export default function Home() {
             {isProcessingUploads && (
               <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 rounded-b-lg backdrop-blur-sm">
                 <Loader2 className="animate-spin h-8 w-8 text-primary mb-2" />
-                <p className="text-muted-foreground">Processing uploads...</p>
+                <p className="text-muted-foreground">Processing with AI...</p>
               </div>
             )}
-            {screenshotPreview ? (
-              <div className="relative w-full aspect-video mb-4 group border rounded-md overflow-hidden shadow-inner">
-                <Image
-                  src={screenshotPreview}
-                  alt="Upload Preview"
-                  layout="fill"
-                  objectFit="contain"
-                  className="transition-transform duration-300 group-hover:scale-105"
-                  data-ai-hint="order screenshot"
-                />
-                <div className="absolute top-2 right-2 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
+            {stagedFiles.length > 0 ? (
+              <div className="w-full space-y-4">
+                {/* Preview area */}
+                {stagedFiles.map((staged, idx) => (
+                  <div key={idx} className="relative w-full border rounded-md overflow-hidden shadow-inner">
+                    {staged.isVideo ? (
+                      <video
+                        src={staged.previewUrl}
+                        controls
+                        playsInline
+                        muted
+                        className="w-full max-h-[300px] object-contain bg-black"
+                      />
+                    ) : (
+                      <div className="relative w-full aspect-video">
+                        <Image
+                          src={staged.previewUrl}
+                          alt="Upload Preview"
+                          layout="fill"
+                          objectFit="contain"
+                          data-ai-hint="order screenshot"
+                        />
+                      </div>
+                    )}
+                    <div className="absolute top-2 right-2 z-10">
+                      <span className="text-xs px-2 py-1 rounded-full bg-black/60 text-white">
+                        {staged.isVideo ? 'Video' : 'Image'} {stagedFiles.length > 1 ? `${idx + 1}/${stagedFiles.length}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Action buttons */}
+                <div className="flex gap-3 w-full">
                   <Button
-                    variant="destructive"
-                    size="icon"
-                    className="h-8 w-8 btn backdrop-blur-sm bg-destructive/80 hover:bg-destructive"
-                    onClick={() => handleRemoveScreenshotPreview()}
-                    aria-label="Remove Preview"
+                    onClick={handleProcessStagedFiles}
+                    className="flex-1 btn-primary btn"
                     disabled={isProcessingUploads}
                   >
-                    <X className="h-4 w-4" />
+                    {isProcessingUploads ? (
+                      <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Processing...</>
+                    ) : (
+                      <><CheckCircle className="mr-2 h-4 w-4" /> Process with AI</>
+                    )}
                   </Button>
                   <Button
-                    variant="secondary"
-                    size="icon"
-                    className="h-8 w-8 btn backdrop-blur-sm bg-secondary/80 hover:bg-secondary"
-                    onClick={handleChangeFile}
-                    aria-label="Upload New File"
-                     disabled={isProcessingUploads}
+                    variant="outline"
+                    onClick={() => handleClearStagedFiles()}
+                    disabled={isProcessingUploads}
+                    className="btn"
                   >
-                    <Upload className="h-4 w-4" />
+                    <X className="mr-2 h-4 w-4" /> Clear
                   </Button>
                 </div>
+
+                {/* Change file */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleChangeFile}
+                  disabled={isProcessingUploads}
+                  className="w-full text-muted-foreground"
+                >
+                  <Upload className="mr-2 h-3 w-3" /> Choose different file(s)
+                </Button>
               </div>
             ) : (
               <Label
@@ -785,14 +846,11 @@ export default function Home() {
               type="file"
               accept="image/png, image/jpeg, image/gif, video/mp4, video/webm, video/quicktime"
               className="hidden"
-              onChange={handleFileUpload}
+              onChange={handleFileSelect}
               disabled={isProcessingUploads}
               multiple
               ref={fileInputRef}
             />
-             {screenshotPreview && !isProcessingUploads && (
-               <p className="text-xs text-muted-foreground mt-2 text-center">Showing preview of the last uploaded file.</p>
-             )}
 
              {/* Info about confidence routing */}
               <div className="flex items-start space-x-2 mt-6 self-start w-full p-3 rounded-md bg-muted/50 border">
