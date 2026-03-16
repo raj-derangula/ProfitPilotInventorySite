@@ -124,6 +124,11 @@ export default function Home() {
   const [isProcessingUploads, setIsProcessingUploads] = useState(false);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
+  const [processingResult, setProcessingResult] = useState<{
+    type: 'success' | 'error' | 'partial';
+    message: string;
+    details?: string;
+  } | null>(null);
   const {toast} = useToast();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,8 +243,9 @@ export default function Home() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // Clean up old preview URLs
+    // Clean up old preview URLs and clear previous result
     stagedFiles.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
+    setProcessingResult(null);
 
     const newStaged: StagedFile[] = [];
 
@@ -280,11 +286,13 @@ export default function Home() {
     if (stagedFiles.length === 0) return;
 
     setIsProcessingUploads(true);
+    setProcessingResult(null);
 
     let successCount = 0;
     let errorCount = 0;
     let pendingCount = 0;
     let autoAddedCount = 0;
+    let lastError = '';
     const newlyPendingProducts: PendingProduct[] = [];
 
     // Gather context for Gemini
@@ -368,11 +376,7 @@ export default function Home() {
         successCount++;
       } catch (error: any) {
         console.error(`Error processing file ${staged.file.name}:`, error);
-        toast({
-          variant: "destructive",
-          title: `AI Error (${staged.file.name})`,
-          description: error.message || "Failed to extract details.",
-        });
+        lastError = error.message || "Failed to extract details.";
         errorCount++;
       }
     }
@@ -387,14 +391,36 @@ export default function Home() {
       setPendingProducts(prev => [...prev, ...newlyPendingProducts]);
     }
 
-    // Summary toast
+    // Build persistent result message
     const parts: string[] = [];
     if (autoAddedCount > 0) parts.push(`${autoAddedCount} auto-added (high confidence)`);
-    if (pendingCount > 0) parts.push(`${pendingCount} pending review`);
+    if (pendingCount > 0) parts.push(`${pendingCount} pending review below`);
     if (errorCount > 0) parts.push(`${errorCount} failed`);
 
+    if (errorCount > 0 && autoAddedCount === 0 && pendingCount === 0) {
+      // All files failed
+      setProcessingResult({
+        type: 'error',
+        message: 'Processing Failed',
+        details: lastError,
+      });
+    } else if (errorCount > 0) {
+      // Some files failed
+      setProcessingResult({
+        type: 'partial',
+        message: parts.join('. '),
+        details: lastError,
+      });
+    } else if (successCount > 0) {
+      setProcessingResult({
+        type: 'success',
+        message: parts.join('. ') || `${successCount} file(s) processed successfully.`,
+      });
+    }
+
+    // Also show a toast for quick feedback
     toast({
-      title: "Processing Complete",
+      title: errorCount > 0 && autoAddedCount === 0 && pendingCount === 0 ? "Processing Failed" : "Processing Complete",
       description: parts.join('. ') || `${successCount} file(s) processed.`,
       variant: errorCount > 0 && autoAddedCount === 0 && pendingCount === 0 ? "destructive" : "default",
     });
@@ -402,7 +428,7 @@ export default function Home() {
     setSuggestedSellingPrice(null);
 
     if (autoAddedCount > 0 && pendingProducts.length === 0 && newlyPendingProducts.length === 0) {
-      setTimeout(() => router.push("/inventory"), 1000);
+      setTimeout(() => router.push("/inventory"), 2000);
     }
   };
 
@@ -854,6 +880,49 @@ export default function Home() {
               multiple
               ref={fileInputRef}
             />
+
+             {/* Processing result banner (persistent, not just a toast) */}
+             {processingResult && stagedFiles.length === 0 && (
+               <div className={cn(
+                 "w-full mt-4 p-4 rounded-lg border flex items-start gap-3",
+                 processingResult.type === 'error' && "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800",
+                 processingResult.type === 'partial' && "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800",
+                 processingResult.type === 'success' && "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800",
+               )}>
+                 {processingResult.type === 'error' ? (
+                   <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                 ) : processingResult.type === 'partial' ? (
+                   <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                 ) : (
+                   <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                 )}
+                 <div className="flex-1 min-w-0">
+                   <p className={cn(
+                     "text-sm font-semibold",
+                     processingResult.type === 'error' && "text-red-800 dark:text-red-200",
+                     processingResult.type === 'partial' && "text-yellow-800 dark:text-yellow-200",
+                     processingResult.type === 'success' && "text-green-800 dark:text-green-200",
+                   )}>
+                     {processingResult.message}
+                   </p>
+                   {processingResult.details && (
+                     <p className={cn(
+                       "text-xs mt-1 break-words",
+                       processingResult.type === 'error' && "text-red-700 dark:text-red-300",
+                       processingResult.type === 'partial' && "text-yellow-700 dark:text-yellow-300",
+                     )}>
+                       {processingResult.details}
+                     </p>
+                   )}
+                 </div>
+                 <button
+                   onClick={() => setProcessingResult(null)}
+                   className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                 >
+                   <X className="h-4 w-4" />
+                 </button>
+               </div>
+             )}
 
              {/* Info about confidence routing */}
               <div className="flex items-start space-x-2 mt-6 self-start w-full p-3 rounded-md bg-muted/50 border">
