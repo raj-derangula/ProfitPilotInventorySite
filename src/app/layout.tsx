@@ -3,7 +3,7 @@ import {Roboto} from 'next/font/google';
 import './globals.css';
 import {Toaster} from "@/components/ui/toaster";
 import {SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger, SidebarFooter} from "@/components/ui/sidebar";
-import {Home, BarChart2, Package, DollarSign, Archive} from "lucide-react";
+import {Home, BarChart2, Package, DollarSign, Archive, FileSpreadsheet} from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -81,6 +81,14 @@ export default function RootLayout({
                                 <SidebarMenuButton>
                                   <Archive/>
                                   <span>Archived Inventory</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link href="/data">
+                                <SidebarMenuButton>
+                                  <FileSpreadsheet/>
+                                  <span>Import / Export</span>
                                 </SidebarMenuButton>
                             </Link>
                         </SidebarMenuItem>

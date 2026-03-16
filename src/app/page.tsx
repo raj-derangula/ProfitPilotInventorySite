@@ -1,4 +1,3 @@
-// Using server directive tells nextjs that this is backend code.
 "use client";
 
 import {useState, useEffect, useRef} from "react";
@@ -8,9 +7,9 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Checkbox} from "@/components/ui/checkbox";
 import {useToast} from "@/hooks/use-toast";
-import {extractProductDetails} from "@/ai/flows/extract-product-details";
+import {extractProductDetails, type ExtractedItem} from "@/ai/flows/extract-product-details";
 import {MarketTrendData, getMarketTrendData} from "@/services/market-trends";
-import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop} from "lucide-react"; // Added Crop icon
+import {Upload, X, Image as ImageIcon, DollarSign, Loader2, CheckCircle, XCircle, Edit, Crop, Video, AlertTriangle} from "lucide-react";
 import {FormField, FormItem, FormLabel, FormControl, FormDescription, Form} from "@/components/ui/form";
 import {z} from "zod";
 import {useForm} from "react-hook-form";
@@ -28,17 +27,24 @@ import {
     DialogFooter,
     DialogClose
 } from "@/components/ui/dialog";
+import {
+  type InventoryItem,
+  generateId,
+  normalizeItem,
+  getInventory,
+  putInventoryItem,
+  getArchive,
+  putArchiveItem,
+  getItemHistorySummary,
+  getRecentCorrections,
+  addCorrection,
+  initDB,
+} from "@/lib/db";
+import { validateVideoFile, extractFrames } from "@/lib/video-frames";
 
-
-// Define the shape of the product data stored in localStorage
-interface StoredProductDetails {
-  productName: string;
-  pricePaid: string; // Total price for original quantity
-  quantity: string; // Current stock or final quantity in archive
-  originalQuantityPurchased: string;
-  costPrice?: string; // Unit cost
-  productImage?: string; // Can be a data URI or placeholder URL
-}
+// Auto-approve threshold
+const HIGH_CONFIDENCE = 0.85;
+const LOW_CONFIDENCE = 0.5;
 
 // Schema for the main form and pending products
 const productDetailsSchema = z.object({
@@ -48,7 +54,7 @@ const productDetailsSchema = z.object({
   pricePaid: z.string().refine((value) => {
     try {
       const num = parseFloat(value);
-      return !isNaN(num) && num >= 0; // Allow 0 or greater
+      return !isNaN(num) && num >= 0;
     } catch (e) {
       return false;
     }
@@ -76,10 +82,10 @@ const productDetailsSchema = z.object({
     message: "Original quantity must be a valid integer greater than zero.",
   }),
   costPrice: z.string().optional().refine((value) => {
-     if (value === undefined || value === "") return true; // Optional is allowed
+     if (value === undefined || value === "") return true;
     try {
       const num = parseFloat(value);
-      return !isNaN(num) && num >= 0; // Allow 0 or greater
+      return !isNaN(num) && num >= 0;
     } catch (e) {
       return false;
     }
@@ -91,24 +97,31 @@ const productDetailsSchema = z.object({
 
 interface ProductDetailsFormValues extends z.infer<typeof productDetailsSchema> {}
 
-// Separate interface for pending products state to handle edits
+// Pending product includes AI metadata
 interface PendingProduct extends ProductDetailsFormValues {
-    screenshotDataUri?: string; // Keep the original full screenshot for reference
-    // productImage field from ProductDetailsFormValues will hold the current image (cropped or original)
+    screenshotDataUri?: string;
+    category: string;
+    sourcePlatform: string;
+    visualDescription: string;
+    aiConfidence: number;
+    matchedHistoryItem?: string;
+    // Track original AI suggestions for correction feedback
+    originalAiName?: string;
+    originalAiPrice?: string;
+    originalAiCategory?: string;
 }
 
 export default function Home() {
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null); // Preview for the *last* uploaded screenshot
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [suggestedSellingPrice, setSuggestedSellingPrice] = useState<number | null>(null);
   const [isProcessingUploads, setIsProcessingUploads] = useState(false);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(false); // State for approval checkbox
-  const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]); // State for pending products
+  const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([]);
   const {toast} = useToast();
   const router = useRouter();
-  const screenshotFileInputRef = useRef<HTMLInputElement>(null); // Ref for screenshot input
-  const pendingProductImageInputRef = useRef<HTMLInputElement>(null); // Ref for pending product image input (for replacing screenshot)
-  const [pendingProductImageIndex, setPendingProductImageIndex] = useState<number | null>(null); // Index of pending product to update image for
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingProductImageInputRef = useRef<HTMLInputElement>(null);
+  const [pendingProductImageIndex, setPendingProductImageIndex] = useState<number | null>(null);
 
   // Cropping State
   const [crop, setCrop] = useState<CropType>();
@@ -118,6 +131,8 @@ export default function Home() {
   const [cropDialogProductIndex, setCropDialogProductIndex] = useState<number | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
+  // DB init
+  useEffect(() => { initDB(); }, []);
 
   const form = useForm<ProductDetailsFormValues>({
     resolver: zodResolver(productDetailsSchema),
@@ -131,214 +146,235 @@ export default function Home() {
     },
   });
 
-   // Function to safely parse JSON from local storage
-    const safelyParseJSON = (key: string): StoredProductDetails[] => {
-        const storedValue = localStorage.getItem(key);
-        if (storedValue) {
-            try {
-                const parsed = JSON.parse(storedValue);
-                if (Array.isArray(parsed)) {
-                    return parsed;
-                }
-                console.warn(`Data for key "${key}" is not an array, clearing.`);
-            } catch (e) {
-                console.error(`Error parsing JSON from localStorage key "${key}":`, e);
-            }
-            localStorage.removeItem(key);
-        }
-        return [];
-    };
+    // Helper function to add a single product to inventory and archive (now uses IndexedDB)
+    const addProductToInventory = async (productData: ProductDetailsFormValues & {
+      category?: string;
+      sourcePlatform?: string;
+      visualDescription?: string;
+      aiConfidence?: number;
+    }) => {
+        const existingProducts = await getInventory();
+        const existingArchive = await getArchive();
 
-    // Helper function to add a single product to inventory and archive
-    const addProductToInventory = (productData: ProductDetailsFormValues) => {
-        const existingProducts = safelyParseJSON("productDetails");
-        const existingPurchasedProducts = safelyParseJSON("purchasedProducts");
-
-        // Use explicitly provided image first, otherwise generate placeholder
         const imageToUse = productData.productImage || `https://picsum.photos/seed/${encodeURIComponent(productData.productName)}/400/300`;
 
-        const newProduct: StoredProductDetails = {
-            productName: productData.productName,
-            pricePaid: String(productData.pricePaid),
-            quantity: String(productData.quantity), // Set current quantity
-            originalQuantityPurchased: productData.originalQuantityPurchased, // Use the passed original quantity
-            costPrice: productData.costPrice ? String(productData.costPrice) : undefined,
-            productImage: imageToUse, // Use the determined image
-        };
+        const now = new Date().toISOString();
 
+        // Check archive for existing item
+        const existingArchiveItem = existingArchive.find(p => p.productName === productData.productName);
 
-        // Check if product already exists in 'purchasedProducts' (archive)
-        const existingArchiveIndex = existingPurchasedProducts.findIndex(p => p.productName === newProduct.productName);
+        if (existingArchiveItem) {
+            const oldTotalPaid = parseFloat(existingArchiveItem.pricePaid) || 0;
+            const oldOriginalQty = parseInt(existingArchiveItem.originalQuantityPurchased, 10) || 0;
+            const oldCurrentQty = parseInt(existingArchiveItem.quantity, 10) || 0;
+            const newTotalPaid = parseFloat(productData.pricePaid) || 0;
+            const newOriginalQty = parseInt(productData.originalQuantityPurchased, 10) || 0;
 
-        let updatedPurchasedProducts;
-        if (existingArchiveIndex > -1) {
-            // Update existing entry in archive
-            updatedPurchasedProducts = [...existingPurchasedProducts];
-            const existingArchived = updatedPurchasedProducts[existingArchiveIndex];
-            const oldTotalPaid = parseFloat(existingArchived.pricePaid) || 0;
-            const oldOriginalQty = parseInt(existingArchived.originalQuantityPurchased, 10) || 0;
-            const oldCurrentQty = parseInt(existingArchived.quantity, 10) || 0;
-
-            const newTotalPaid = parseFloat(newProduct.pricePaid) || 0;
-            const newOriginalQty = parseInt(newProduct.originalQuantityPurchased, 10) || 0;
-
-            existingArchived.pricePaid = (oldTotalPaid + newTotalPaid).toFixed(2); // Add total prices
-            existingArchived.originalQuantityPurchased = (oldOriginalQty + newOriginalQty).toString(); // Add original quantities
-            existingArchived.quantity = (oldCurrentQty + newOriginalQty).toString(); // Add to current quantity in archive
-            // Keep existing costPrice or update if new one provided? - Let's keep existing for simplicity
-            existingArchived.productImage = newProduct.productImage; // Update image if needed
+            existingArchiveItem.pricePaid = (oldTotalPaid + newTotalPaid).toFixed(2);
+            existingArchiveItem.originalQuantityPurchased = (oldOriginalQty + newOriginalQty).toString();
+            existingArchiveItem.quantity = (oldCurrentQty + newOriginalQty).toString();
+            existingArchiveItem.productImage = imageToUse;
+            existingArchiveItem.updatedAt = now;
+            if (productData.category) existingArchiveItem.category = productData.category;
+            if (productData.sourcePlatform) existingArchiveItem.sourcePlatform = productData.sourcePlatform;
+            if (productData.visualDescription) existingArchiveItem.visualDescription = productData.visualDescription;
+            await putArchiveItem(existingArchiveItem);
         } else {
-            // Add as new entry to archive
-            updatedPurchasedProducts = [...existingPurchasedProducts, newProduct];
+            await putArchiveItem(normalizeItem({
+                ...productData,
+                productImage: imageToUse,
+                createdAt: now,
+                updatedAt: now,
+            }));
         }
 
-         // Check if product already exists in 'productDetails' (current inventory)
-         const existingInventoryIndex = existingProducts.findIndex(p => p.productName === newProduct.productName);
-         let updatedProducts;
-         if(existingInventoryIndex > -1) {
-            // Update existing entry in inventory
-             updatedProducts = [...existingProducts];
-             const existingInv = updatedProducts[existingInventoryIndex];
-             const oldInvQty = parseInt(existingInv.quantity, 10) || 0;
-             const newInvQty = parseInt(newProduct.quantity, 10) || 0;
-             const oldInvOriginalQty = parseInt(existingInv.originalQuantityPurchased, 10) || 0;
-             const newInvOriginalQty = parseInt(newProduct.originalQuantityPurchased, 10) || 0;
-             const oldInvTotalPaid = parseFloat(existingInv.pricePaid) || 0;
-             const newInvTotalPaid = parseFloat(newProduct.pricePaid) || 0;
+        // Check inventory for existing item
+        const existingInvItem = existingProducts.find(p => p.productName === productData.productName);
 
-             existingInv.quantity = (oldInvQty + newInvQty).toString();
-             // Update original qty and price paid to reflect the *combined* purchase for unit price calculation later
-             existingInv.originalQuantityPurchased = (oldInvOriginalQty + newInvOriginalQty).toString();
-             existingInv.pricePaid = (oldInvTotalPaid + newInvTotalPaid).toFixed(2);
-             // Keep existing costPrice or update if new one provided? - Let's keep existing
-             existingInv.productImage = newProduct.productImage; // Update image
-         } else {
-            // Add as new entry to inventory
-             updatedProducts = [...existingProducts, newProduct];
-         }
+        if (existingInvItem) {
+            const oldInvQty = parseInt(existingInvItem.quantity, 10) || 0;
+            const newInvQty = parseInt(productData.quantity, 10) || 0;
+            const oldInvOriginalQty = parseInt(existingInvItem.originalQuantityPurchased, 10) || 0;
+            const newInvOriginalQty = parseInt(productData.originalQuantityPurchased, 10) || 0;
+            const oldInvTotalPaid = parseFloat(existingInvItem.pricePaid) || 0;
+            const newInvTotalPaid = parseFloat(productData.pricePaid) || 0;
 
-
-        // Filter out 0 quantity items AFTER adding/updating
-        const filteredProducts = updatedProducts.filter(product => parseInt(product.quantity, 10) > 0);
-
-        localStorage.setItem("productDetails", JSON.stringify(filteredProducts));
-        localStorage.setItem("purchasedProducts", JSON.stringify(updatedPurchasedProducts));
+            existingInvItem.quantity = (oldInvQty + newInvQty).toString();
+            existingInvItem.originalQuantityPurchased = (oldInvOriginalQty + newInvOriginalQty).toString();
+            existingInvItem.pricePaid = (oldInvTotalPaid + newInvTotalPaid).toFixed(2);
+            existingInvItem.productImage = imageToUse;
+            existingInvItem.updatedAt = now;
+            if (productData.category) existingInvItem.category = productData.category;
+            if (productData.sourcePlatform) existingInvItem.sourcePlatform = productData.sourcePlatform;
+            if (productData.visualDescription) existingInvItem.visualDescription = productData.visualDescription;
+            await putInventoryItem(existingInvItem);
+        } else {
+            const newQty = parseInt(productData.quantity, 10);
+            if (newQty > 0) {
+                await putInventoryItem(normalizeItem({
+                    ...productData,
+                    productImage: imageToUse,
+                    createdAt: now,
+                    updatedAt: now,
+                }));
+            }
+        }
 
         toast({
-            title: "✅ Product Added/Updated!",
+            title: "Product Added/Updated!",
             description: `${productData.productName} (${productData.quantity}) added/updated in inventory.`,
         });
     };
 
-
-  const handleScreenshotUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Process uploaded files (images + videos)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files || files.length === 0) {
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     setIsProcessingUploads(true);
-    setScreenshotPreview(null); // Clear preview initially
+    setScreenshotPreview(null);
 
-    let lastDataUri: string | null = null;
     let successCount = 0;
     let errorCount = 0;
     let pendingCount = 0;
+    let autoAddedCount = 0;
     const newlyPendingProducts: PendingProduct[] = [];
 
+    // Gather context for Gemini
+    let historySummary: string | undefined;
+    let corrections: string | undefined;
+    try {
+      [historySummary, corrections] = await Promise.all([
+        getItemHistorySummary(),
+        getRecentCorrections(),
+      ]);
+    } catch (e) {
+      console.warn('Failed to load context for AI:', e);
+    }
+
     for (const file of Array.from(files)) {
-      const reader = new FileReader();
       try {
+        let mediaDataUris: string[];
+
+        if (file.type.startsWith('video/')) {
+          // Video: validate and extract frames
+          const validationError = validateVideoFile(file);
+          if (validationError) {
+            toast({ variant: "destructive", title: `Video Error (${file.name})`, description: validationError.error });
+            errorCount++;
+            continue;
+          }
+
+          toast({ title: `Processing video: ${file.name}`, description: "Extracting frames..." });
+          const result = await extractFrames(file);
+          mediaDataUris = result.frames;
+          if (result.frames.length > 0) {
+            setScreenshotPreview(result.frames[0]);
+          }
+        } else {
+          // Image: convert to base64
           const dataUri = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
             reader.onerror = reject;
             reader.readAsDataURL(file);
           });
-
-        lastDataUri = dataUri; // Keep track of the last successful read for preview
-        setScreenshotPreview(dataUri); // Preview current file being processed
-
-        const productDetails = await extractProductDetails({ screenshotDataUri: dataUri });
-        const quantity = Math.max(1, productDetails.quantityPurchased);
-
-        // Use the full screenshot data URI as the initial productImage and screenshotDataUri
-        const productData: PendingProduct = {
-            productName: productDetails.productName,
-            pricePaid: productDetails.pricePaid.toString(),
-            quantity: quantity.toString(),
-            originalQuantityPurchased: quantity.toString(), // Set original quantity from AI
-            costPrice: "", // Default cost price
-            productImage: dataUri, // Use screenshot as final product image initially
-            screenshotDataUri: dataUri, // Store the original screenshot separately
-        };
-
-        // Check if approval is required
-        if (requireApproval) {
-            newlyPendingProducts.push(productData); // Add to temporary list for this batch
-            pendingCount++;
-        } else {
-            // Directly add to inventory, passing necessary fields
-             addProductToInventory({
-                 productName: productData.productName,
-                 pricePaid: productData.pricePaid,
-                 quantity: productData.quantity,
-                 originalQuantityPurchased: productData.originalQuantityPurchased, // Pass original qty
-                 costPrice: productData.costPrice,
-                 productImage: productData.productImage, // Pass the screenshot image
-             });
-            successCount++;
+          mediaDataUris = [dataUri];
+          setScreenshotPreview(dataUri);
         }
 
+        // Call enhanced Gemini
+        const result = await extractProductDetails({
+          mediaDataUris,
+          itemHistorySummary: historySummary || undefined,
+          recentCorrections: corrections || undefined,
+        });
+
+        // Process each identified item
+        for (const item of result.items) {
+          const quantity = Math.max(1, item.quantityPurchased);
+          const imageUri = file.type.startsWith('video/') ? mediaDataUris[0] : mediaDataUris[0];
+
+          const productData: PendingProduct = {
+            productName: item.productName,
+            pricePaid: item.pricePaid.toString(),
+            quantity: quantity.toString(),
+            originalQuantityPurchased: quantity.toString(),
+            costPrice: "",
+            productImage: imageUri,
+            screenshotDataUri: imageUri,
+            category: item.category,
+            sourcePlatform: item.sourcePlatform,
+            visualDescription: item.visualDescription,
+            aiConfidence: item.confidence,
+            matchedHistoryItem: item.matchedHistoryItem,
+            originalAiName: item.productName,
+            originalAiPrice: item.pricePaid.toString(),
+            originalAiCategory: item.category,
+          };
+
+          // Confidence-based routing
+          if (item.confidence >= HIGH_CONFIDENCE) {
+            // Auto-add high-confidence items
+            await addProductToInventory({
+              productName: productData.productName,
+              pricePaid: productData.pricePaid,
+              quantity: productData.quantity,
+              originalQuantityPurchased: productData.originalQuantityPurchased,
+              costPrice: productData.costPrice,
+              productImage: productData.productImage,
+              category: productData.category,
+              sourcePlatform: productData.sourcePlatform,
+              visualDescription: productData.visualDescription,
+              aiConfidence: productData.aiConfidence,
+            });
+            autoAddedCount++;
+          } else {
+            // Send to review
+            newlyPendingProducts.push(productData);
+            pendingCount++;
+          }
+        }
+
+        successCount++;
       } catch (error: any) {
         console.error(`Error processing file ${file.name}:`, error);
         toast({
           variant: "destructive",
-          title: `AI Extraction Error (${file.name})`,
-          description: error.message || "Failed to extract details from screenshot.",
+          title: `AI Error (${file.name})`,
+          description: error.message || "Failed to extract details.",
         });
         errorCount++;
       }
     }
 
-     if (screenshotFileInputRef.current) {
-        screenshotFileInputRef.current.value = ''; // Clear the file input after processing
-     }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
 
     setIsProcessingUploads(false);
 
-    // Add newly pending products to the main state
     if (newlyPendingProducts.length > 0) {
-        setPendingProducts(prev => [...prev, ...newlyPendingProducts]);
+      setPendingProducts(prev => [...prev, ...newlyPendingProducts]);
     }
 
-     // Updated summary toast
-     let description = "";
-     if (successCount > 0) description += `${successCount} product(s) added/updated directly. `;
-     if (pendingCount > 0) description += `${pendingCount} product(s) pending approval. `;
-     if (errorCount > 0) description += `${errorCount} failed.`;
+    // Summary toast
+    const parts: string[] = [];
+    if (autoAddedCount > 0) parts.push(`${autoAddedCount} auto-added (high confidence)`);
+    if (pendingCount > 0) parts.push(`${pendingCount} pending review`);
+    if (errorCount > 0) parts.push(`${errorCount} failed`);
 
-     toast({
-        title: "Screenshot Processing Complete",
-        description: description.trim(),
-        variant: errorCount > 0 && successCount === 0 && pendingCount === 0 ? "destructive" : "default",
-     });
+    toast({
+      title: "Processing Complete",
+      description: parts.join('. ') || `${successCount} file(s) processed.`,
+      variant: errorCount > 0 && autoAddedCount === 0 && pendingCount === 0 ? "destructive" : "default",
+    });
 
-     setSuggestedSellingPrice(null);
+    setSuggestedSellingPrice(null);
 
-      // Redirect only if products were added directly AND no products are pending now
-      if (successCount > 0 && pendingProducts.length === 0 && newlyPendingProducts.length === 0) {
-         setTimeout(() => router.push("/inventory"), 1000);
-      } else if (newlyPendingProducts.length > 0) {
-        // Don't redirect, show pending section
-      } else if (errorCount > 0 && successCount === 0 && pendingCount === 0) {
-        // Don't redirect on total failure
-      } else if (successCount > 0 && pendingProducts.length > 0) {
-         // Added some directly, but others are pending, don't redirect
-         toast({
-            title: "Products Added & Pending",
-            description: "Some products added/updated, others require review below.",
-         });
-      }
+    if (autoAddedCount > 0 && pendingProducts.length === 0 && newlyPendingProducts.length === 0) {
+      setTimeout(() => router.push("/inventory"), 1000);
+    }
   };
 
   const calculateSuggestedPrice = async () => {
@@ -358,7 +394,7 @@ export default function Home() {
       const suggestedPrice = Math.max(0, marketTrendData.averagePrice * 1.2);
       setSuggestedSellingPrice(suggestedPrice);
       toast({
-        title: "📈 Suggested Selling Price",
+        title: "Suggested Selling Price",
         description: `Based on market trends, $${suggestedPrice.toFixed(2)} is suggested.`,
       });
     } catch (error: any) {
@@ -374,49 +410,44 @@ export default function Home() {
     }
   };
 
- const onSubmit = (values: ProductDetailsFormValues) => {
-    // Manual submission doesn't have a specific image unless we add an input later
-    // For now, it will use the placeholder in addProductToInventory if productImage is empty
+ const onSubmit = async (values: ProductDetailsFormValues) => {
     const dataToAdd = {
         ...values,
-        // For manual add, original quantity IS the quantity entered initially
         originalQuantityPurchased: values.quantity,
-        // Pass productImage value (could be empty string, handled by addProductToInventory)
         productImage: values.productImage || "",
     };
-    addProductToInventory(dataToAdd);
+    await addProductToInventory(dataToAdd);
 
-    form.reset(); // Reset manual form
-    setScreenshotPreview(null); // Clear any screenshot preview
+    form.reset();
+    setScreenshotPreview(null);
     setSuggestedSellingPrice(null);
 
-    // Only redirect if no products are pending approval
     if (pendingProducts.length === 0) {
         router.push("/inventory");
     } else {
          toast({
             title: "Manual Product Added/Updated",
-            description: "There are still products pending approval from screenshot uploads.",
+            description: "There are still products pending approval.",
          });
     }
 };
 
     const handleRemoveScreenshotPreview = (showToast = true) => {
         setScreenshotPreview(null);
-        if (screenshotFileInputRef.current) {
-            screenshotFileInputRef.current.value = '';
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
         if (showToast) {
             toast({
-                title: "Screenshot Preview Removed",
-                description: "Ready for new upload or manual entry.",
+                title: "Preview Removed",
+                description: "Ready for new upload.",
             });
         }
     };
 
-  const handleChangeScreenshot = () => {
-    if (screenshotFileInputRef.current) {
-      screenshotFileInputRef.current.click();
+  const handleChangeFile = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -426,9 +457,7 @@ export default function Home() {
         setPendingProducts(prev => {
             const updated = [...prev];
             if (updated[index]) {
-                // @ts-ignore - Ignore type checking for dynamic field update
-                updated[index][field] = value;
-                 // If quantity changes, update originalQuantityPurchased to match for pending items
+                (updated[index] as any)[field] = value;
                  if (field === 'quantity') {
                     updated[index].originalQuantityPurchased = value;
                  }
@@ -437,7 +466,6 @@ export default function Home() {
         });
     };
 
-    // Trigger file input for a specific pending product to REPLACE the image
     const handleReplacePendingProductImage = (index: number) => {
         setPendingProductImageIndex(index);
         if (pendingProductImageInputRef.current) {
@@ -445,12 +473,9 @@ export default function Home() {
         }
     };
 
-     // Handle the file selection for replacing pending product image
     const handlePendingProductImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file || pendingProductImageIndex === null) {
-            return;
-        }
+        if (!file || pendingProductImageIndex === null) return;
 
         const reader = new FileReader();
         try {
@@ -460,30 +485,23 @@ export default function Home() {
                 reader.readAsDataURL(file);
             });
 
-            // Update the specific pending product's productImage AND screenshotDataUri
             setPendingProducts(prev => {
                 const updated = [...prev];
                 if (updated[pendingProductImageIndex]) {
                     updated[pendingProductImageIndex].productImage = dataUri;
-                    updated[pendingProductImageIndex].screenshotDataUri = dataUri; // Also update the source for cropping
+                    updated[pendingProductImageIndex].screenshotDataUri = dataUri;
                 }
                 return updated;
             });
 
             toast({
                 title: "Image Replaced",
-                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} replaced. You can crop it or approve directly.`,
+                description: `Image for ${pendingProducts[pendingProductImageIndex].productName} replaced.`,
             });
-
         } catch (error) {
             console.error("Error reading product image file:", error);
-            toast({
-                variant: "destructive",
-                title: "Image Upload Error",
-                description: "Failed to read the selected image file.",
-            });
+            toast({ variant: "destructive", title: "Image Upload Error", description: "Failed to read the selected image." });
         } finally {
-             // Reset the input and index
             if (pendingProductImageInputRef.current) {
                 pendingProductImageInputRef.current.value = '';
             }
@@ -492,13 +510,12 @@ export default function Home() {
     };
 
 
-    const handleApprovePendingProduct = (index: number) => {
+    const handleApprovePendingProduct = async (index: number) => {
         const productToApprove = pendingProducts[index];
         if (!productToApprove) return;
 
-        // Basic validation before approving
-         const quantityNum = parseInt(productToApprove.quantity, 10);
-         const priceNum = parseFloat(productToApprove.pricePaid);
+        const quantityNum = parseInt(productToApprove.quantity, 10);
+        const priceNum = parseFloat(productToApprove.pricePaid);
 
         if (!productToApprove.productName.trim() || isNaN(priceNum) || priceNum < 0 || isNaN(quantityNum) || quantityNum <= 0) {
              toast({
@@ -509,22 +526,50 @@ export default function Home() {
              return;
         }
 
-        // The productToApprove already holds the potentially edited values including the productImage (which could be cropped)
-        const dataToInventory: ProductDetailsFormValues = {
+        // Record corrections if user edited AI suggestions
+        if (productToApprove.originalAiName && productToApprove.productName !== productToApprove.originalAiName) {
+            await addCorrection({
+                id: generateId(),
+                originalSuggestion: productToApprove.originalAiName,
+                correctedValue: productToApprove.productName,
+                field: 'productName',
+                timestamp: new Date().toISOString(),
+            });
+        }
+        if (productToApprove.originalAiPrice && productToApprove.pricePaid !== productToApprove.originalAiPrice) {
+            await addCorrection({
+                id: generateId(),
+                originalSuggestion: productToApprove.originalAiPrice,
+                correctedValue: productToApprove.pricePaid,
+                field: 'pricePaid',
+                timestamp: new Date().toISOString(),
+            });
+        }
+        if (productToApprove.originalAiCategory && productToApprove.category !== productToApprove.originalAiCategory) {
+            await addCorrection({
+                id: generateId(),
+                originalSuggestion: productToApprove.originalAiCategory,
+                correctedValue: productToApprove.category,
+                field: 'category',
+                timestamp: new Date().toISOString(),
+            });
+        }
+
+        await addProductToInventory({
             productName: productToApprove.productName,
             pricePaid: productToApprove.pricePaid,
             quantity: productToApprove.quantity,
-            originalQuantityPurchased: productToApprove.originalQuantityPurchased, // Use the value from pending state
+            originalQuantityPurchased: productToApprove.originalQuantityPurchased,
             costPrice: productToApprove.costPrice,
-            productImage: productToApprove.productImage, // Pass the final image (original, replaced, or cropped)
-        };
+            productImage: productToApprove.productImage,
+            category: productToApprove.category,
+            sourcePlatform: productToApprove.sourcePlatform,
+            visualDescription: productToApprove.visualDescription,
+            aiConfidence: productToApprove.aiConfidence,
+        });
 
-        addProductToInventory(dataToInventory); // Add/Update the product
-
-        // Remove from pending list
         setPendingProducts(prev => prev.filter((_, i) => i !== index));
 
-        // Redirect if this was the last pending product
          if (pendingProducts.length === 1) {
             router.push("/inventory");
          }
@@ -537,7 +582,7 @@ export default function Home() {
         setPendingProducts(prev => prev.filter((_, i) => i !== index));
         toast({
             title: "Product Discarded",
-            description: `${productToDiscard.productName || 'Pending product'} was removed from the pending list.`,
+            description: `${productToDiscard.productName || 'Pending product'} was removed.`,
             variant: "destructive",
         });
     };
@@ -546,14 +591,10 @@ export default function Home() {
 
     function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
         const { width, height } = e.currentTarget;
-        // Suggest a centered 1:1 crop initially
         setCrop(centerCrop(
           makeAspectCrop(
-            {
-              unit: '%',
-              width: 90, // Start with a large crop area
-            },
-            1 / 1, // Aspect ratio 1:1
+            { unit: '%', width: 90 },
+            1 / 1,
             width,
             height
           ),
@@ -565,13 +606,10 @@ export default function Home() {
     function getCroppedImg(
         image: HTMLImageElement,
         crop: PixelCrop,
-        fileName: string
     ): Promise<string> {
         const canvas = document.createElement("canvas");
         const scaleX = image.naturalWidth / image.width;
         const scaleY = image.naturalHeight / image.height;
-        canvas.width = crop.width;
-        canvas.height = crop.height;
         const ctx = canvas.getContext("2d");
 
         if (!ctx) {
@@ -602,29 +640,27 @@ export default function Home() {
                     reject(new Error("Canvas is empty"));
                     return;
                 }
-                // Convert blob to data URL
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result as string);
                 reader.onerror = reject;
                 reader.readAsDataURL(blob);
-            }, "image/png", 1); // Use PNG format for higher quality
+            }, "image/png", 1);
         });
     }
 
     const handleOpenCropDialog = (index: number) => {
         const product = pendingProducts[index];
-        if (product && product.screenshotDataUri) { // Use screenshotDataUri as source for cropping
+        if (product && product.screenshotDataUri) {
             setCropDialogImageSrc(product.screenshotDataUri);
             setCropDialogProductIndex(index);
             setOpenCropDialog(true);
-             // Reset crop state when opening dialog
              setCrop(undefined);
              setCompletedCrop(undefined);
         } else {
              toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Original screenshot image not found for cropping.",
+                description: "Original image not found for cropping.",
              });
         }
     };
@@ -635,9 +671,7 @@ export default function Home() {
                 const croppedImageDataUrl = await getCroppedImg(
                     imgRef.current,
                     completedCrop,
-                    `cropped-${pendingProducts[cropDialogProductIndex].productName}.png`
                 );
-                // Update the productImage for the specific pending product
                 setPendingProducts(prev => {
                     const updated = [...prev];
                     if (updated[cropDialogProductIndex]) {
@@ -648,14 +682,14 @@ export default function Home() {
                 setOpenCropDialog(false);
                 toast({
                     title: "Image Cropped",
-                    description: `Image for ${pendingProducts[cropDialogProductIndex].productName} cropped successfully. Click Approve to save.`,
+                    description: `Image cropped successfully. Click Approve to save.`,
                 });
             } catch (e) {
                 console.error("Crop failed", e);
                  toast({
                     variant: "destructive",
                     title: "Cropping Failed",
-                    description: "Could not crop the image. Please try again.",
+                    description: "Could not crop the image.",
                  });
             }
         } else {
@@ -667,34 +701,43 @@ export default function Home() {
         }
     };
 
+  // Confidence badge color
+  const confidenceBadge = (confidence: number) => {
+    if (confidence >= HIGH_CONFIDENCE) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+    if (confidence >= LOW_CONFIDENCE) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+    return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+  };
+
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-10"> {/* Increased base spacing */}
+    <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-10">
       <h1 className="page-title">Add New Product</h1>
 
        {/* Upload and Manual Entry Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full max-w-6xl"> {/* Change to lg for breakpoint */}
-         {/* Screenshot Upload Card */}
-        <Card className="card transition-all duration-300 hover:shadow-xl"> {/* Use card class, add transition */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full max-w-6xl">
+         {/* Upload Card (Images + Videos) */}
+        <Card className="card transition-all duration-300 hover:shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <Upload className="h-5 w-5 text-primary" />
-              Upload Order Screenshot(s)
+              Upload Screenshots or Videos
             </CardTitle>
-            <CardDescription>Let AI extract product details. You can upload multiple files.</CardDescription>
+            <CardDescription>
+              Upload order screenshots or screen recordings. AI will identify items using visual analysis, text, and your purchase history.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center p-6 min-h-[300px] relative">
             {isProcessingUploads && (
-              <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 rounded-b-lg backdrop-blur-sm"> {/* Added backdrop blur */}
+              <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 rounded-b-lg backdrop-blur-sm">
                 <Loader2 className="animate-spin h-8 w-8 text-primary mb-2" />
                 <p className="text-muted-foreground">Processing uploads...</p>
               </div>
             )}
             {screenshotPreview ? (
-              <div className="relative w-full aspect-video mb-4 group border rounded-md overflow-hidden shadow-inner"> {/* Added border and shadow */}
+              <div className="relative w-full aspect-video mb-4 group border rounded-md overflow-hidden shadow-inner">
                 <Image
                   src={screenshotPreview}
-                  alt="Last Uploaded Screenshot Preview"
+                  alt="Upload Preview"
                   layout="fill"
                   objectFit="contain"
                   className="transition-transform duration-300 group-hover:scale-105"
@@ -704,9 +747,9 @@ export default function Home() {
                   <Button
                     variant="destructive"
                     size="icon"
-                    className="h-8 w-8 btn backdrop-blur-sm bg-destructive/80 hover:bg-destructive" // Added btn, blur, alpha bg
+                    className="h-8 w-8 btn backdrop-blur-sm bg-destructive/80 hover:bg-destructive"
                     onClick={() => handleRemoveScreenshotPreview()}
-                    aria-label="Remove Screenshot Preview"
+                    aria-label="Remove Preview"
                     disabled={isProcessingUploads}
                   >
                     <X className="h-4 w-4" />
@@ -714,9 +757,9 @@ export default function Home() {
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="h-8 w-8 btn backdrop-blur-sm bg-secondary/80 hover:bg-secondary" // Added btn, blur, alpha bg
-                    onClick={handleChangeScreenshot}
-                    aria-label="Change Screenshot(s)"
+                    className="h-8 w-8 btn backdrop-blur-sm bg-secondary/80 hover:bg-secondary"
+                    onClick={handleChangeFile}
+                    aria-label="Upload New File"
                      disabled={isProcessingUploads}
                   >
                     <Upload className="h-4 w-4" />
@@ -725,49 +768,45 @@ export default function Home() {
               </div>
             ) : (
               <Label
-                htmlFor="screenshot-upload"
+                htmlFor="file-upload"
                 className={cn(
-                  "cursor-pointer border-2 border-dashed border-border hover:border-primary/80 transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center hover:bg-accent/50", // Added hover bg
+                  "cursor-pointer border-2 border-dashed border-border hover:border-primary/80 transition-colors duration-200 rounded-lg p-8 flex flex-col items-center justify-center w-full text-center hover:bg-accent/50",
                    isProcessingUploads && "cursor-not-allowed opacity-50"
                 )}
               >
                 <Upload className="h-10 w-10 text-muted-foreground mb-3" />
                 <span className="text-sm font-medium text-foreground">Click or Drag to Upload</span>
-                <span className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF (Multiple allowed)</span>
+                <span className="text-xs text-muted-foreground mt-1">Images: PNG, JPG, GIF | Videos: MP4, WebM, MOV</span>
+                <span className="text-xs text-muted-foreground mt-0.5">Videos: max 30s, 50MB | Multiple files allowed</span>
               </Label>
             )}
             <Input
-              id="screenshot-upload"
+              id="file-upload"
               type="file"
-              accept="image/png, image/jpeg, image/gif"
+              accept="image/png, image/jpeg, image/gif, video/mp4, video/webm, video/quicktime"
               className="hidden"
-              onChange={handleScreenshotUpload}
+              onChange={handleFileUpload}
               disabled={isProcessingUploads}
-              multiple // Allow multiple file selection
-              ref={screenshotFileInputRef} // Use the ref here
+              multiple
+              ref={fileInputRef}
             />
              {screenshotPreview && !isProcessingUploads && (
-               <p className="text-xs text-muted-foreground mt-2 text-center">Showing preview of the last uploaded image.</p>
+               <p className="text-xs text-muted-foreground mt-2 text-center">Showing preview of the last uploaded file.</p>
              )}
 
-             {/* Approval Checkbox */}
-              <div className="flex items-center space-x-2 mt-6 self-start w-full"> {/* Increased margin */}
-                <Checkbox
-                    id="require-approval"
-                    checked={requireApproval}
-                    onCheckedChange={(checked) => setRequireApproval(Boolean(checked))}
-                    disabled={isProcessingUploads}
-                />
-                <Label htmlFor="require-approval" className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70 mb-0"> {/* Removed margin bottom */}
-                    Require approval before adding products
-                </Label>
+             {/* Info about confidence routing */}
+              <div className="flex items-start space-x-2 mt-6 self-start w-full p-3 rounded-md bg-muted/50 border">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-muted-foreground">
+                  <strong>Smart routing:</strong> High-confidence items are auto-added. Lower confidence items appear below for review. Corrections you make improve future accuracy.
+                </div>
              </div>
 
           </CardContent>
         </Card>
 
         {/* Product Details Form Card (Manual Entry) */}
-        <Card className="card transition-all duration-300 hover:shadow-xl"> {/* Use card class */}
+        <Card className="card transition-all duration-300 hover:shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-semibold">
               <ImageIcon className="h-5 w-5 text-primary"/>
@@ -777,7 +816,7 @@ export default function Home() {
           </CardHeader>
           <CardContent className="p-6">
             <Form {...form}>
-              <fieldset disabled={isProcessingUploads}> {/* Also disable manual form while processing uploads */}
+              <fieldset disabled={isProcessingUploads}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FormField
@@ -846,14 +885,11 @@ export default function Home() {
                     />
                 </div>
 
-                 {/* Hidden field for productImage (can be populated manually if needed later) */}
                  <FormField control={form.control} name="productImage" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" {...field} /></FormControl></FormItem> )}/>
-
-                  {/* Hidden field derived from quantity for consistency, value set in onSubmit */}
-                 <FormField control={form.control} name="originalQuantityPurchased" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" value={form.getValues("quantity")} {...field} /></FormControl></FormItem> )}/>
+                 <FormField control={form.control} name="originalQuantityPurchased" render={({field}) => ( <FormItem className="hidden"><FormControl><Input type="hidden" {...field} value={form.getValues("quantity")} /></FormControl></FormItem> )}/>
 
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-border/50 mt-8"> {/* Added border-t and margin-top */}
+                <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-border/50 mt-8">
                   <Button type="submit" className="flex-1 btn-primary btn" disabled={isProcessingUploads || isLoadingPrice}>
                     {isProcessingUploads ? 'Processing...' : 'Add Product Manually'}
                   </Button>
@@ -880,13 +916,12 @@ export default function Home() {
 
        {/* Pending Products Review Section */}
         {pendingProducts.length > 0 && (
-            <Card className="w-full max-w-6xl shadow-lg card"> {/* Added card class */}
+            <Card className="w-full max-w-6xl shadow-lg card">
                 <CardHeader>
                     <CardTitle>Review Pending Products ({pendingProducts.length})</CardTitle>
-                    <CardDescription>Review, edit, and approve or discard products extracted from screenshots.</CardDescription>
+                    <CardDescription>These items need your review. Edit details and approve or discard. Your corrections improve future AI accuracy.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Hidden file input for replacing pending product images */}
                     <Input
                         id="pending-product-image-upload"
                         type="file"
@@ -896,8 +931,8 @@ export default function Home() {
                         ref={pendingProductImageInputRef}
                     />
                     {pendingProducts.map((product, index) => (
-                        <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-shadow duration-200 hover:shadow-md bg-background"> {/* Added bg */}
-                            <div className="absolute top-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-10"> {/* Adjusted positioning and gap */}
+                        <div key={`pending-${index}`} className="border rounded-lg p-4 space-y-4 relative group transition-shadow duration-200 hover:shadow-md bg-background">
+                            <div className="absolute top-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-10">
                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:bg-green-100 hover:text-green-700 btn rounded-full" onClick={() => handleApprovePendingProduct(index)} aria-label="Approve Product" title="Approve">
                                      <CheckCircle className="h-5 w-5" />
                                  </Button>
@@ -905,16 +940,16 @@ export default function Home() {
                                      <XCircle className="h-5 w-5" />
                                  </Button>
                             </div>
-                            <div className="flex flex-col md:flex-row gap-6"> {/* Increased gap */}
-                                {/* Product Image and Action Buttons */}
-                                <div className="relative w-full md:w-36 h-36 flex-shrink-0 group/image border rounded-md overflow-hidden"> {/* Adjusted size, added border */}
+                            <div className="flex flex-col md:flex-row gap-6">
+                                {/* Product Image */}
+                                <div className="relative w-full md:w-36 h-36 flex-shrink-0 group/image border rounded-md overflow-hidden">
                                     {product.productImage ? (
                                         <Image
-                                            src={product.productImage} // Display current image (original, replaced, or cropped)
+                                            src={product.productImage}
                                             alt={product.productName || 'Pending Product Image'}
                                             layout="fill"
-                                            objectFit="cover" // Use cover to fill the square
-                                            className="transition-transform duration-300 group-hover/image:scale-110" // Added zoom effect
+                                            objectFit="cover"
+                                            className="transition-transform duration-300 group-hover/image:scale-110"
                                             data-ai-hint="pending product item"
                                         />
                                     ) : (
@@ -922,24 +957,23 @@ export default function Home() {
                                             <ImageIcon className="h-10 w-10" />
                                         </div>
                                     )}
-                                    {/* Image Action Buttons */}
                                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 group-hover/image:opacity-100 transition-opacity duration-200">
                                          <Button
                                             variant="secondary"
                                             size="icon"
-                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background" // Style adjustments
-                                            onClick={() => handleOpenCropDialog(index)} // Open crop dialog
+                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background"
+                                            onClick={() => handleOpenCropDialog(index)}
                                             aria-label="Crop product image"
                                             title="Crop Image"
-                                            disabled={!product.screenshotDataUri} // Disable if no original screenshot
+                                            disabled={!product.screenshotDataUri}
                                         >
                                             <Crop className="h-4 w-4" />
                                         </Button>
                                          <Button
                                             variant="secondary"
                                             size="icon"
-                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background" // Style adjustments
-                                            onClick={() => handleReplacePendingProductImage(index)} // Replace image
+                                            className="h-9 w-9 btn rounded-full bg-background/80 hover:bg-background"
+                                            onClick={() => handleReplacePendingProductImage(index)}
                                             aria-label="Replace product image"
                                             title="Replace Image"
                                         >
@@ -948,9 +982,31 @@ export default function Home() {
                                      </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 flex-grow"> {/* Adjusted gap */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 flex-grow">
+                                    {/* Confidence badge */}
+                                    <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-2">
+                                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", confidenceBadge(product.aiConfidence))}>
+                                            Confidence: {Math.round(product.aiConfidence * 100)}%
+                                        </span>
+                                        {product.category && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                {product.category}
+                                            </span>
+                                        )}
+                                        {product.sourcePlatform && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                                {product.sourcePlatform}
+                                            </span>
+                                        )}
+                                        {product.matchedHistoryItem && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                                Matches: {product.matchedHistoryItem}
+                                            </span>
+                                        )}
+                                    </div>
+
                                     {/* Editable fields */}
-                                    <div className="sm:col-span-2 lg:col-span-3"> {/* Name spans more cols */}
+                                    <div className="sm:col-span-2 lg:col-span-3">
                                         <Label htmlFor={`pending-name-${index}`}>Product Name</Label>
                                         <Input
                                             id={`pending-name-${index}`}
@@ -996,6 +1052,28 @@ export default function Home() {
                                             />
                                          </div>
                                     </div>
+                                    {/* Category (editable) */}
+                                    <div>
+                                        <Label htmlFor={`pending-category-${index}`}>Category</Label>
+                                        <Input
+                                            id={`pending-category-${index}`}
+                                            value={product.category || ''}
+                                            onChange={(e) => handlePendingProductChange(index, 'category', e.target.value)}
+                                            placeholder="e.g., Power Tools > Drills"
+                                            className="input mt-1"
+                                        />
+                                    </div>
+                                    {/* Source Platform (editable) */}
+                                    <div>
+                                        <Label htmlFor={`pending-source-${index}`}>Source Platform</Label>
+                                        <Input
+                                            id={`pending-source-${index}`}
+                                            value={product.sourcePlatform || ''}
+                                            onChange={(e) => handlePendingProductChange(index, 'sourcePlatform', e.target.value)}
+                                            placeholder="e.g., Temu, Amazon"
+                                            className="input mt-1"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1006,28 +1084,27 @@ export default function Home() {
 
        {/* Crop Dialog */}
        <Dialog open={openCropDialog} onOpenChange={setOpenCropDialog}>
-         <DialogContent className="sm:max-w-[600px] md:max-w-[800px] lg:max-w-[1000px]"> {/* Make dialog wider */}
+         <DialogContent className="sm:max-w-[600px] md:max-w-[800px] lg:max-w-[1000px]">
            <DialogHeader>
              <DialogTitle>Crop Product Image</DialogTitle>
              <DialogDescription>
-               Select the area for the product image. The original screenshot is used as the source.
+               Select the area for the product image.
              </DialogDescription>
            </DialogHeader>
-           <div className="py-4 max-h-[70vh] overflow-auto flex justify-center items-center bg-muted/20 rounded-md border"> {/* Added bg, border */}
+           <div className="py-4 max-h-[70vh] overflow-auto flex justify-center items-center bg-muted/20 rounded-md border">
              {cropDialogImageSrc && (
                <ReactCrop
                  crop={crop}
                  onChange={c => setCrop(c)}
                  onComplete={c => setCompletedCrop(c)}
-                 aspect={1} // Keep aspect ratio 1:1 for consistency
+                 aspect={1}
                  className="max-w-full max-h-full"
-                 // style={{ background: 'rgba(0,0,0,0.1)' }} // Add subtle background to crop area itself if needed via style prop
                >
                  <img
                    ref={imgRef}
                    alt="Crop preview"
                    src={cropDialogImageSrc}
-                   style={{ maxHeight: '65vh', display: 'block' }} // Limit image height and ensure block display
+                   style={{ maxHeight: '65vh', display: 'block' }}
                    onLoad={onImageLoad}
                  />
                </ReactCrop>
