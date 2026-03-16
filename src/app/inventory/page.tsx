@@ -11,161 +11,129 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose
 } from "@/components/ui/dialog";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {useToast} from "@/hooks/use-toast";
-import {Edit, Trash2, PlusCircle, DollarSign, PackageSearch, Package} from "lucide-react"; // Added icons
-import Image from 'next/image'; // Import next/image
-import { cn } from "@/lib/utils"; // Import cn utility
-
-interface ProductDetails {
-  productName: string;
-  pricePaid: string; // Total price paid for original quantity
-  quantity: string; // Current quantity in stock
-  originalQuantityPurchased: string; // Original quantity bought
-  costPrice?: string; // Optional cost per unit
-  productImage?: string;
-}
+import {Edit, Trash2, PlusCircle, DollarSign, PackageSearch, Package} from "lucide-react";
+import Image from 'next/image';
+import { cn } from "@/lib/utils";
+import {
+  type InventoryItem,
+  getInventory,
+  putInventoryItem,
+  deleteInventoryItem,
+  initDB,
+} from "@/lib/db";
 
 export default function Inventory() {
-  const [productDetails, setProductDetails] = useState<ProductDetails[]>([]);
+  const [productDetails, setProductDetails] = useState<InventoryItem[]>([]);
   const router = useRouter();
   const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [openRemoveDialog, setOpenRemoveDialog] = useState<number | null>(null); // Store index to remove
-  const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
+  const [openRemoveDialog, setOpenRemoveDialog] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<InventoryItem | null>(null);
   const [editProductName, setEditProductName] = useState("");
-  const [editPricePaid, setEditPricePaid] = useState(""); // This should likely be total price paid
-  const [editQuantity, setEditQuantity] = useState(""); // Current quantity
-  const [editOriginalQuantityPurchased, setEditOriginalQuantityPurchased] = useState(""); // Keep original quantity
+  const [editPricePaid, setEditPricePaid] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
   const [editCostPrice, setEditCostPrice] = useState("");
   const {toast} = useToast();
 
- useEffect(() => {
-    // Retrieve product details from local storage
-    const storedDetails = localStorage.getItem("productDetails");
-    if (storedDetails) {
-      try {
-          const parsedDetails = JSON.parse(storedDetails);
-          // Ensure it's an array and filter out products with quantity 0 or less
-          if (Array.isArray(parsedDetails)) {
-              const filteredDetails = parsedDetails.filter(product => product && parseInt(product.quantity, 10) > 0);
-              setProductDetails(filteredDetails);
-          } else {
-              localStorage.removeItem("productDetails"); // Clear invalid data
-          }
-      } catch (e) {
-          console.error("Failed to parse product details from localStorage:", e);
-          localStorage.removeItem("productDetails"); // Clear invalid data
-      }
-    }
- }, []);
-
+  useEffect(() => {
+    (async () => {
+      await initDB();
+      const items = await getInventory();
+      setProductDetails(items.filter(p => parseInt(p.quantity, 10) > 0));
+    })();
+  }, []);
 
   const handleGoBack = () => {
-    router.push("/"); // Navigate back to the main page
+    router.push("/");
   };
 
-  const handleEditProduct = (index: number) => {
-    const product = productDetails[index];
-    setSelectedProductIndex(index);
+  const handleEditProduct = (product: InventoryItem) => {
+    setSelectedProduct(product);
     setEditProductName(product.productName);
-    setEditPricePaid(product.pricePaid); // Total price paid
-    setEditQuantity(product.quantity); // Current quantity
-    setEditOriginalQuantityPurchased(product.originalQuantityPurchased); // Original quantity (usually not edited here)
-    setEditCostPrice(product.costPrice || ""); // Unit cost price
+    setEditPricePaid(product.pricePaid);
+    setEditQuantity(product.quantity);
+    setEditCostPrice(product.costPrice || "");
     setOpenEditDialog(true);
   };
 
-  const handleUpdateProduct = () => {
-    if (selectedProductIndex !== null) {
-        // Basic validation
-        if (!editProductName.trim() || parseFloat(editPricePaid) < 0 || parseInt(editQuantity, 10) < 0 || (editCostPrice && parseFloat(editCostPrice) < 0)) {
-            toast({
-                variant: "destructive",
-                title: "Invalid Input",
-                description: "Please ensure all fields are valid.",
-            });
-            return;
-        }
+  const handleUpdateProduct = async () => {
+    if (!selectedProduct) return;
 
-      const updatedProductDetails = [...productDetails];
-      updatedProductDetails[selectedProductIndex] = {
-        ...updatedProductDetails[selectedProductIndex], // Keep other properties like productImage
-        productName: editProductName,
-        pricePaid: editPricePaid, // Keep total price paid
-        quantity: editQuantity, // Update current quantity
-        costPrice: editCostPrice || undefined, // Update unit cost price
-        // originalQuantityPurchased is usually not updated here, but kept from initial load
-      };
-
-      localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
-      setProductDetails(updatedProductDetails.filter(p => parseInt(p.quantity, 10) > 0)); // Update state and filter
-      setOpenEditDialog(false);
-      toast({
-        title: "Product Updated!",
-        description: `${editProductName} details have been saved.`,
-      });
+    if (!editProductName.trim() || parseFloat(editPricePaid) < 0 || parseInt(editQuantity, 10) < 0 || (editCostPrice && parseFloat(editCostPrice) < 0)) {
+      toast({ variant: "destructive", title: "Invalid Input", description: "Please ensure all fields are valid." });
+      return;
     }
-  };
 
-    const handleRemoveProduct = (index: number) => {
-        const productToRemove = productDetails[index];
-        const updatedProductDetails = productDetails.filter((_, i) => i !== index);
-
-        localStorage.setItem("productDetails", JSON.stringify(updatedProductDetails));
-        setProductDetails(updatedProductDetails);
-        setOpenRemoveDialog(null); // Close confirmation dialog
-        toast({
-            title: "Product Removed!",
-            description: `${productToRemove.productName} has been removed from inventory.`,
-        });
+    const updated: InventoryItem = {
+      ...selectedProduct,
+      productName: editProductName,
+      pricePaid: editPricePaid,
+      quantity: editQuantity,
+      costPrice: editCostPrice || undefined,
+      updatedAt: new Date().toISOString(),
     };
 
-   // Calculate unit price paid for display
-   const calculateUnitPricePaid = (product: ProductDetails): string => {
-     const price = parseFloat(product.pricePaid);
-     const originalQty = parseInt(product.originalQuantityPurchased, 10);
-     if (!isNaN(price) && !isNaN(originalQty) && originalQty > 0) {
-       return (price / originalQty).toFixed(2);
-     }
-     return "N/A"; // Or handle error appropriately
-   };
+    await putInventoryItem(updated);
 
+    const items = await getInventory();
+    setProductDetails(items.filter(p => parseInt(p.quantity, 10) > 0));
+    setOpenEditDialog(false);
+    toast({ title: "Product Updated!", description: `${editProductName} details have been saved.` });
+  };
+
+  const handleRemoveProduct = async (id: string) => {
+    const product = productDetails.find(p => p.id === id);
+    await deleteInventoryItem(id);
+
+    const items = await getInventory();
+    setProductDetails(items.filter(p => parseInt(p.quantity, 10) > 0));
+    setOpenRemoveDialog(null);
+    toast({ title: "Product Removed!", description: `${product?.productName || 'Product'} has been removed from inventory.` });
+  };
+
+  const calculateUnitPricePaid = (product: InventoryItem): string => {
+    const price = parseFloat(product.pricePaid);
+    const originalQty = parseInt(product.originalQuantityPurchased, 10);
+    if (!isNaN(price) && !isNaN(originalQty) && originalQty > 0) {
+      return (price / originalQty).toFixed(2);
+    }
+    return "N/A";
+  };
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-6 sm:py-10 px-3 sm:px-4">
-      <div className="w-full max-w-6xl flex flex-col sm:flex-row justify-between items-center mb-10 gap-4"> {/* Adjusted flex for mobile, added gap */}
-         <h1 className="page-title text-center sm:text-left flex-grow flex items-center justify-center sm:justify-start gap-3 mb-0"> {/* Center on mobile, left on sm+, remove mb */}
-            <Package className="h-8 w-8 text-primary"/> {/* Package icon */}
+      <div className="w-full max-w-6xl flex flex-col sm:flex-row justify-between items-center mb-10 gap-4">
+         <h1 className="page-title text-center sm:text-left flex-grow flex items-center justify-center sm:justify-start gap-3 mb-0">
+            <Package className="h-8 w-8 text-primary"/>
              Current Inventory
          </h1>
-        <Button onClick={handleGoBack} className="btn-primary btn w-full sm:w-auto"> {/* Full width on mobile */}
+        <Button onClick={handleGoBack} className="btn-primary btn w-full sm:w-auto">
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Product
         </Button>
       </div>
 
       {productDetails && productDetails.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-6xl">
-          {productDetails.map((product, index) => (
-            <Card key={index} className="card w-full flex flex-col overflow-hidden group"> {/* Added group */}
+          {productDetails.map((product) => (
+            <Card key={product.id} className="card w-full flex flex-col overflow-hidden group">
               <CardHeader className="pb-2">
-                 {/* Product Image */}
-                 <div className="relative w-full h-48 mb-4 rounded-t-lg overflow-hidden border-b"> {/* Added border */}
+                 <div className="relative w-full h-48 mb-4 rounded-t-lg overflow-hidden border-b">
                    <Image
                      src={product.productImage || `https://picsum.photos/seed/${encodeURIComponent(product.productName)}/400/300`}
                      alt={product.productName}
                      layout="fill"
                      objectFit="cover"
-                     className="transition-transform duration-300 group-hover:scale-105" // Added effect
+                     className="transition-transform duration-300 group-hover:scale-105"
                      data-ai-hint="product item"
                    />
                  </div>
                 <CardTitle className="text-lg font-semibold truncate" title={product.productName}>{product.productName}</CardTitle>
                 <CardDescription>Current Stock: <span className="font-medium text-foreground">{product.quantity}</span></CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-2 text-sm flex-grow px-4 sm:px-6 pb-4 pt-0"> {/* Adjusted padding */}
+              <CardContent className="grid gap-2 text-sm flex-grow px-4 sm:px-6 pb-4 pt-0">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Unit Price Paid:</span>
                   <span className="font-semibold">${calculateUnitPricePaid(product)}</span>
@@ -176,12 +144,24 @@ export default function Inventory() {
                      <span className="font-semibold">${parseFloat(product.costPrice).toFixed(2)}</span>
                    </div>
                  )}
+                 {product.category && (
+                   <div className="flex justify-between items-center">
+                     <span className="text-muted-foreground">Category:</span>
+                     <span className="font-medium text-xs truncate max-w-[150px]" title={product.category}>{product.category}</span>
+                   </div>
+                 )}
+                 {product.sourcePlatform && (
+                   <div className="flex justify-between items-center">
+                     <span className="text-muted-foreground">Source:</span>
+                     <span className="font-medium text-xs">{product.sourcePlatform}</span>
+                   </div>
+                 )}
               </CardContent>
-               <div className="p-4 pt-2 mt-auto border-t border-border/50 flex justify-end gap-2 bg-muted/30"> {/* Added bg */}
-                  <Button onClick={() => handleEditProduct(index)} variant="outline" size="sm" className="btn">
+               <div className="p-4 pt-2 mt-auto border-t border-border/50 flex justify-end gap-2 bg-muted/30">
+                  <Button onClick={() => handleEditProduct(product)} variant="outline" size="sm" className="btn">
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button onClick={() => setOpenRemoveDialog(index)} variant="destructive" size="sm" className="btn">
+                  <Button onClick={() => setOpenRemoveDialog(product.id)} variant="destructive" size="sm" className="btn">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                </div>
@@ -189,13 +169,13 @@ export default function Inventory() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 w-full max-w-md mx-auto bg-card p-10 rounded-lg shadow-md border"> {/* Enhanced empty state */}
+        <div className="text-center py-16 w-full max-w-md mx-auto bg-card p-10 rounded-lg shadow-md border">
             <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-4 text-lg font-semibold">No Products Found</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-                Your inventory is currently empty. Add a product using the button below to get started tracking your items.
+                Your inventory is currently empty. Add a product to get started.
             </p>
-            <Button className="mt-6 btn-primary btn w-full" onClick={handleGoBack}> {/* Full width button */}
+            <Button className="mt-6 btn-primary btn w-full" onClick={handleGoBack}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add First Product
             </Button>
@@ -211,73 +191,29 @@ export default function Inventory() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label htmlFor="name" className="sm:text-right">
-                Name
-              </Label>
+              <Label htmlFor="name" className="sm:text-right">Name</Label>
               <Input id="name" value={editProductName} onChange={(e) => setEditProductName(e.target.value)} className="sm:col-span-3 input" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label htmlFor="price" className="sm:text-right">
-                Total Price Paid
-              </Label>
+              <Label htmlFor="price" className="sm:text-right">Total Price Paid</Label>
                <div className="relative sm:col-span-3">
                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                   <Input
-                    id="price"
-                    type="number"
-                    value={editPricePaid}
-                    onChange={(e) => setEditPricePaid(e.target.value)}
-                    className="pl-8 input" // Use input class
-                    step="0.01"
-                    min="0"
-                  />
+                   <Input id="price" type="number" value={editPricePaid} onChange={(e) => setEditPricePaid(e.target.value)} className="pl-8 input" step="0.01" min="0" />
                </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label htmlFor="quantity" className="sm:text-right">
-                Quantity
-              </Label>
-              <Input
-                id="quantity"
-                type="number"
-                value={editQuantity}
-                onChange={(e) => setEditQuantity(e.target.value)}
-                className="sm:col-span-3 input" // Use input class
-                min="0" // Allow 0, filtering happens on display/storage
-              />
+              <Label htmlFor="quantity" className="sm:text-right">Quantity</Label>
+              <Input id="quantity" type="number" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} className="sm:col-span-3 input" min="0" />
             </div>
              <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label htmlFor="cost" className="sm:text-right">
-                Unit Cost Price
-              </Label>
+              <Label htmlFor="cost" className="sm:text-right">Unit Cost Price</Label>
                <div className="relative sm:col-span-3">
                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                 <Input
-                   id="cost"
-                   type="number"
-                   value={editCostPrice}
-                   onChange={(e) => setEditCostPrice(e.target.value)}
-                   className="pl-8 input" // Use input class
-                   placeholder="Optional"
-                   step="0.01"
-                   min="0"
-                 />
+                 <Input id="cost" type="number" value={editCostPrice} onChange={(e) => setEditCostPrice(e.target.value)} className="pl-8 input" placeholder="Optional" step="0.01" min="0" />
                </div>
             </div>
-             {/* Original quantity is usually not edited */}
-             {/*<div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="originalQuantity" className="text-right">
-                Original Qty
-              </Label>
-              <Input
-                id="originalQuantity"
-                value={editOriginalQuantityPurchased}
-                 readOnly // Generally shouldn't edit original purchase qty here
-                className="col-span-3 bg-muted"
-              />
-            </div> */}
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpenEditDialog(false)} className="btn w-full sm:w-auto">Cancel</Button>
             <Button type="button" onClick={handleUpdateProduct} className="btn-primary btn w-full sm:w-auto">Save Changes</Button>
           </DialogFooter>
@@ -290,23 +226,15 @@ export default function Inventory() {
            <DialogHeader>
              <DialogTitle>Confirm Removal</DialogTitle>
              <DialogDescription>
-               Are you sure you want to remove <span className="font-bold">{productDetails[openRemoveDialog!]?.productName}</span> from your inventory? This action cannot be undone.
+               Are you sure you want to remove <span className="font-bold">{productDetails.find(p => p.id === openRemoveDialog)?.productName}</span> from your inventory? This action cannot be undone.
              </DialogDescription>
            </DialogHeader>
-           <DialogFooter className="flex flex-col sm:flex-row gap-2"> {/* Stack buttons on mobile */}
-             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn w-full sm:w-auto">
-               Cancel
-             </Button>
-             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn w-full sm:w-auto">
-               Remove Product
-             </Button>
+           <DialogFooter className="flex flex-col sm:flex-row gap-2">
+             <Button variant="outline" onClick={() => setOpenRemoveDialog(null)} className="btn w-full sm:w-auto">Cancel</Button>
+             <Button variant="destructive" onClick={() => handleRemoveProduct(openRemoveDialog!)} className="btn w-full sm:w-auto">Remove Product</Button>
            </DialogFooter>
          </DialogContent>
        </Dialog>
-
     </div>
   );
 }
-
-// Helper component for empty state
-// import { PackageSearch } from 'lucide-react'; // Already imported above
