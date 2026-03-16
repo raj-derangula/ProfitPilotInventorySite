@@ -50,7 +50,6 @@ const LOW_CONFIDENCE = 0.5;
 interface StagedFile {
   file: File;
   previewUrl: string; // object URL for preview
-  dataUri: string;    // base64 data URI for Gemini
   isVideo: boolean;
 }
 
@@ -259,15 +258,7 @@ export default function Home() {
       // Create object URL for preview (works for both images and videos)
       const previewUrl = URL.createObjectURL(file);
 
-      // Read file as data URI for Gemini
-      const dataUri = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      newStaged.push({ file, previewUrl, dataUri, isVideo });
+      newStaged.push({ file, previewUrl, isVideo });
     }
 
     setStagedFiles(newStaged);
@@ -308,17 +299,28 @@ export default function Home() {
       console.warn('Failed to load context for AI:', e);
     }
 
-    for (const staged of stagedFiles) {
+    // Capture a local reference for cleanup (avoids stale closure over stagedFiles state)
+    const filesToProcess = stagedFiles;
+
+    for (const staged of filesToProcess) {
       try {
+        // Read data URI lazily at processing time to avoid holding large base64 strings in state
+        const dataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(staged.file);
+        });
+
         // Send the data URI directly to Gemini (works for both images and videos)
         const result = await extractProductDetails({
-          mediaDataUris: [staged.dataUri],
+          mediaDataUris: [dataUri],
           itemHistorySummary: historySummary || undefined,
           recentCorrections: corrections || undefined,
         });
 
         // For product image, use the data URI for images, or a placeholder for videos
-        const productImageUri = staged.isVideo ? undefined : staged.dataUri;
+        const productImageUri = staged.isVideo ? undefined : dataUri;
 
         // Process each identified item
         for (const item of result.items) {
@@ -377,8 +379,8 @@ export default function Home() {
 
     setIsProcessingUploads(false);
 
-    // Clean up staged files
-    stagedFiles.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
+    // Clean up staged files using local ref (not stale state)
+    filesToProcess.forEach(sf => URL.revokeObjectURL(sf.previewUrl));
     setStagedFiles([]);
 
     if (newlyPendingProducts.length > 0) {
@@ -772,16 +774,17 @@ export default function Home() {
                         controls
                         playsInline
                         muted
+                        preload="metadata"
                         className="w-full max-h-[300px] object-contain bg-black"
+                        ref={(el) => { if (el) el.setAttribute('webkit-playsinline', ''); }}
                       />
                     ) : (
                       <div className="relative w-full aspect-video">
-                        <Image
+                        {/* Native <img> required: Next.js <Image> does not support blob: URLs */}
+                        <img
                           src={staged.previewUrl}
                           alt="Upload Preview"
-                          layout="fill"
-                          objectFit="contain"
-                          data-ai-hint="order screenshot"
+                          className="absolute inset-0 w-full h-full object-contain"
                         />
                       </div>
                     )}
@@ -837,14 +840,14 @@ export default function Home() {
               >
                 <Upload className="h-10 w-10 text-muted-foreground mb-3" />
                 <span className="text-sm font-medium text-foreground">Click or Drag to Upload</span>
-                <span className="text-xs text-muted-foreground mt-1">Images: PNG, JPG, GIF | Videos: MP4, WebM, MOV</span>
+                <span className="text-xs text-muted-foreground mt-1">Images: PNG, JPG, GIF | Videos: MP4, MOV</span>
                 <span className="text-xs text-muted-foreground mt-0.5">Videos: max 30s, 50MB | Multiple files allowed</span>
               </Label>
             )}
             <Input
               id="file-upload"
               type="file"
-              accept="image/png, image/jpeg, image/gif, video/mp4, video/webm, video/quicktime"
+              accept="image/png, image/jpeg, image/gif, video/mp4, video/quicktime"
               className="hidden"
               onChange={handleFileSelect}
               disabled={isProcessingUploads}
